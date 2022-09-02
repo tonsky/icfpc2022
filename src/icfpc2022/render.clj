@@ -61,8 +61,17 @@
           (ComplexBlock. (:shape block) (split-block block [x y]))))))
   (go block id))
 
-(defmethod transform :color [picture [_ id [r g b a]]]
-  picture)
+(defmethod transform :color [block [_ id color]]
+  (defn go [block id]
+    (let [[child-id & rest] id]
+      (if (some? child-id)
+        (do
+          (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
+          (update-in block [:children child-id] (fn [child] (go child rest))))
+        (do
+          (assert (instance? SimpleBlock block) (str "Expected simple block"))
+          (assoc block :color color)))))
+  (go block id))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
