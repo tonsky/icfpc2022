@@ -27,51 +27,48 @@
     [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
 
 (def *log 
-  (atom
-    [[:pcut [0] [200 200]]
-     [:color [0 1] [0xCC 0x33 0x33 0xFF]]]))
+  (atom []))
 
 (defmulti transform ; => picture'
   (fn [picture op]
     (first op)))
-
 
 (defn split-block [simple-block [x y]]
   (let [[kind l b r t] (:shape simple-block)
         color (:color simple-block)]
     (assert (= kind :rect))
     (assert (and (< x r)
-                 (< l x)
-                 (< y t)
-                 (< b y)))
+              (< l x)
+              (< y t)
+              (< b y)))
     [(SimpleBlock. [kind l b x y] color)
      (SimpleBlock. [kind x b r y] color)
      (SimpleBlock. [kind x y r t] color)
      (SimpleBlock. [kind l y x t] color)]))
 
 (defmethod transform :pcut [block [_ id [x y]]]
-  (defn go [block id]
-    (let [[child-id & rest] id]
-      (if (some? child-id)
-        (do
-          (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
-          (update-in block [:children child-id] (fn [child] (go child rest))))
-        (do
-          (assert (instance? SimpleBlock block) (str "Expected simple block"))
-          (ComplexBlock. (:shape block) (split-block block [x y]))))))
-  (go block id))
+  (let [go (fn go [block id]
+             (let [[child-id & rest] id]
+               (if (some? child-id)
+                 (do
+                   (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
+                   (update-in block [:children child-id] (fn [child] (go child rest))))
+                 (do
+                   (assert (instance? SimpleBlock block) (str "Expected simple block"))
+                   (ComplexBlock. (:shape block) (split-block block [x y]))))))]
+    (go block id)))
 
 (defmethod transform :color [block [_ id color]]
-  (defn go [block id]
-    (let [[child-id & rest] id]
-      (if (some? child-id)
-        (do
-          (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
-          (update-in block [:children child-id] (fn [child] (go child rest))))
-        (do
-          (assert (instance? SimpleBlock block) (str "Expected simple block"))
-          (assoc block :color color)))))
-  (go block id))
+  (let [go (fn go [block id]
+             (let [[child-id & rest] id]
+               (if (some? child-id)
+                 (do
+                   (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
+                   (update-in block [:children child-id] (fn [child] (go child rest))))
+                 (do
+                   (assert (instance? SimpleBlock block) (str "Expected simple block"))
+                   (assoc block :color color)))))]
+    (go block id)))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -169,6 +166,20 @@
       (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides)
       (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides))))
 
+(defn dump-log []
+  (println "--- begin ---")
+  (doseq [op @*log]
+    (println
+      (case (first op)
+        :pcut
+        (let [[_ id [x y]] op]
+          (format "pcut [%s] [%d, %d]" (str/join "." id) x y))
+        
+        :color
+        (let [[_ id [r g b a]] op]
+          (format "color [%s] [%d, %d, %d, %d]" (str/join "." id) r g b a)))))
+  (println "--- end ---"))
+
 (def app
   (ui/default-theme
     {:hui.text-field/padding-top    10
@@ -226,8 +237,7 @@
                           (ui/label op))))))))]
            (ui/gap 0 10)
            (ui/button
-             #(doseq [op @*log]
-                (println op))
+             dump-log
              (ui/label "Dump log")))]))))
 
 (defn redraw []
