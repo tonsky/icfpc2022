@@ -21,12 +21,11 @@
                         ])
 
 (defrecord ComplexBlock [shape    ;; [:rect l b r t]
-                         children ;; [(SimpleBlock | ComplexBlock) ...]
+                         children ;; { id (SimpleBlock | ComplexBlock) ... }
                          ])
 
 (def start-picture
-  (ComplexBlock. [:rect 0 0 400 400]
-    [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
+  { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) })
 
 (def *log 
   (atom []))
@@ -69,39 +68,40 @@
     [(SimpleBlock. [kind l b r y] color)
      (SimpleBlock. [kind l y r t] color)]))
 
-(defn update-by-id [block id  f]
-  (let [go (fn go [block id]
-             (let [[child-id & rest] id]
-               (if (some? child-id)
-                 (do
-                   (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
-                   (update-in block [:children child-id] (fn [child] (go child rest))))
-                 (do
-                   (assert (instance? SimpleBlock block) (str "Expected simple block"))
-                   (f block)))))]
-    (go block id)))
+(defmethod transform :color [picture [_ id color]]
+  (update picture id (fn [block]
+                       (assert (instance? SimpleBlock block) "Set color to Complex block")
+                       (assoc block :color color))))
 
-(defmethod transform :pcut [block [_ id [x y]]]
-  (update-by-id block id
-    (fn [block]
-      (ComplexBlock. (:shape block) (pcut-block block [x y])))))
+(defmethod transform :pcut [picture [_ id [x y]]]
+  (let [block (get picture id)
+        new-blocks  (map-indexed (fn [ind block]
+                                   [(str id "." ind) block])
+                                 (pcut-block block [x y]))]
+    (assert (instance? SimpleBlock block) "Cut Complex block")
+    (-> picture
+        (dissoc id)
+        (merge (into {} new-blocks)))))
 
-(defmethod transform :color [block [_ id color]]
-  (update-by-id block id
-    (fn [block]
-      (assoc block :color color))))
+(defmethod transform :xcut [picture [_ id x]]
+  (let [block (get picture id)
+        new-blocks  (map-indexed (fn [ind block]
+                                   [(str id "." ind) block])
+                                 (xcut-block block x))]
+    (assert (instance? SimpleBlock block) "Cut Complex block")
+    (-> picture
+        (dissoc id)
+        (merge (into {} new-blocks)))))
 
-(defmethod transform :xcut [block [_ id x]]
-  (update-by-id block id
-    (fn [block]
-      (ComplexBlock. (:shape block)
-        (xcut-block block x)))))
-
-(defmethod transform :ycut [block [_ id y]]
-  (update-by-id block id
-    (fn [block]
-      (ComplexBlock. (:shape block)
-        (ycut-block block y)))))
+(defmethod transform :ycut [picture [_ id y]]
+  (let [block (get picture id)
+        new-blocks  (map-indexed (fn [ind block]
+                                   [(str id "." ind) block])
+                                 (ycut-block block y))]
+    (assert (instance? SimpleBlock block) "Cut Complex block")
+    (-> picture
+        (dissoc id)
+        (merge (into {} new-blocks)))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -147,17 +147,9 @@
     (<= l x r)
     (<= b y t)))
 
-(defn find-leaf [block id [x y]]
-  (when (inside? (:shape block) [x y])
-    (if (instance? ComplexBlock block)
-      (reduce
-        (fn [i child]
-          (if-some [id' (find-leaf child (conj id i) [x y])]
-            (reduced id')
-            (inc i)))
-        0
-        (:children block))
-      id)))
+(defn find-block-id [picture [x y]]
+  (let [[id block] (first (filter (fn [[id block]] (inside? (:shape block) [x y])) picture))]
+    id))
 
 (defn event [ctx event]
   (core/eager-or
@@ -172,7 +164,7 @@
             (:pressed? event))
       (when-some [[x y] (coords ctx event)]
         (let [tool @*tool
-              id   (find-leaf @*picture [] [x y])]
+              id   (find-block-id @*picture [x y])]
           (when-some [op (case (first tool)
                            :pcut
                            [:pcut id [x y]]
@@ -204,11 +196,14 @@
     (when debug?
       (canvas/draw-rect canvas rect stroke-guides))
     (if (instance? ComplexBlock block)
-      (dotimes [i (count (:children block))]
-        (draw-block canvas (nth (:children block) i) (str id "." i) debug?))
+      (assert false "Not implemented")
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))))
+
+(defn draw-picture [^Canvas canvas picture debug?]
+  (doseq [[id block] picture]
+    (draw-block canvas block id debug?)))
 
 (defn ^Bitmap render-to-bitmap [picture debug?]
   (let [bitmap (Bitmap.)]
@@ -216,7 +211,7 @@
     (let [canvas' (Canvas. bitmap)]
       (with-open [fill (paint/fill 0xFFFFFFFF)]
         (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
-      (draw-block canvas' picture "" debug?))
+      (draw-picture canvas' picture debug?))
     bitmap))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
@@ -298,9 +293,9 @@
              [:stretch 1
               (tool [:ycut]
                 (ui/label "━"))])
-           
+
            (ui/gap 0 10)
-           
+
            (ui/row
              [:stretch 1
               (tool [:color 255 255 255 255]
@@ -316,9 +311,9 @@
               (tool [:color 0x0 0x4A 0xAD 255]
                 (ui/rect (paint/fill 0xFF004AAD)
                   (ui/gap 30 20)))])
-                                 
+
            (ui/gap 0 10)
-           
+
            (ui/button
              #(do
                 (reset! *log [])
@@ -332,7 +327,7 @@
            (ui/gap 0 10)
            (ui/label "Log:")
            (ui/gap 0 10)
-           
+
            [:stretch 1
             (ui/dynamic _ [log @*log]
               (ui/vscrollbar
@@ -354,7 +349,7 @@
                                 (ui/rect (paint/fill 0xFFEEEEEE)
                                   label)
                                 label))))))))))]
-           
+
            (ui/gap 0 10)
            (ui/button dump
              (ui/label "Dump")))]))))
