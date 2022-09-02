@@ -27,8 +27,9 @@
     [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
 
 (def *log 
-  [[:pcut [0] 200 200]
-   [:color [0 1] 0xCC 0x33 0x33 0xFF]])
+  (atom
+    [[:pcut [0] 200 200]
+     [:color [0 1] 0xCC 0x33 0x33 0xFF]]))
 
 (defmulti transform ; => picture'
   (fn [picture op]
@@ -41,26 +42,49 @@
   picture)
 
 (def *picture
-  (atom (reduce transform start-picture *log)))
+  (atom (reduce transform start-picture @*log)))
 
-(defonce *coord
-  (atom (IPoint. 0 0)))
+(def *coord
+  (atom nil))
 
-(defonce *tool
-  (atom :pcut))
+(def *tool
+  (atom [:pcut]))
+
+(defn coords [ctx event]
+  (let [x (int (quot (:x event) (:scale ctx)))
+        y (int (- 400 (quot (:y event) (:scale ctx))))]
+    (cond
+      (< x -420)  nil
+      (< -20 x 0) nil
+      (< 400 x)   nil
+      (< y 0)     nil
+      (< 400 y)   nil
+      (< 0 x 400)   [x y]
+      (< -420 x -20) [(+ x 420) y])))
 
 (defn event [ctx event]
-  (when (= :mouse-move (:event event))
-    (let [x (quot (:x event) (:scale ctx))
-          y (- 400 (quot (:y event) (:scale ctx)))]
-      (cond
-        (< x 0)       (reset! *coord nil)
-        (< 400 x 420) (reset! *coord nil)
-        (< 820 x)     (reset! *coord nil)
-        (< y 0)       (reset! *coord nil)
-        (< 400 y)     (reset! *coord nil)
-        (< x 400)     (reset! *coord (IPoint. x y))
-        (< 420 x 820) (reset! *coord (IPoint. (- x 420) y))))))
+  (core/eager-or
+    (when (= :mouse-move (:event event))
+      (when-some [[x y] (coords ctx event)]
+        (reset! *coord [x y])
+        true))
+  
+    (when (and
+            (= :mouse-button (:event event))
+            (= :primary (:button event))
+            (:pressed? event))
+      (when-some [[x y] (coords ctx event)]
+        (println x y event @*tool)
+        (let [tool @*tool]
+          (when-some [op (case (first tool)
+                           :pcut
+                           [:pcut x y]
+                           
+                           nil)]
+            (println op)
+            (swap! *log conj op)
+            (swap! *picture transform op)
+            true))))))
 
 (defn draw-block [ctx ^Canvas canvas block id]
   (let [{:keys [scale]} ctx
@@ -77,10 +101,17 @@
       (* scale (- 400 b 10))
       (:font-ui ctx) (:fill-text ctx))))
 
+(def fill-guides
+  (paint/fill 0x40FF0000))
+
 (defn draw [ctx ^Canvas canvas ^IPoint size]
-  (with-open [fill (paint/fill 0xFFFFFFFF)]
-    (canvas/draw-rect canvas (IRect/makeXYWH 0 0 800 800) fill))
-  (draw-block ctx canvas @*picture ""))
+  (let [{:keys [scale]} ctx]
+    (with-open [fill (paint/fill 0xFFFFFFFF)]
+      (canvas/draw-rect canvas (IRect/makeXYWH 0 0 (* scale 400) (* scale 400)) fill))
+    (draw-block ctx canvas @*picture "")
+    (when-some [[x y] @*coord]
+      (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides)
+      (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides))))
 
 (def app
   (ui/default-theme
@@ -107,7 +138,7 @@
              (ui/label (str "Tool: " tool)))
            (ui/gap 0 10)
            (ui/dynamic _ [coord @*coord]
-             (ui/label (str "Mouse: " (:x coord) " " (:y coord))))
+             (ui/label (str "Mouse: " coord)))
            (ui/gap 0 10)
            (ui/button
              #(reset! *tool [:pcut])
@@ -123,7 +154,25 @@
            (ui/gap 0 10)
            (ui/button
              #(reset! *tool [:color 0x0 0x4A 0xAD 255])
-             (ui/label "Fill Blue")))]))))
+             (ui/label "Fill Blue"))
+           
+           (ui/gap 0 20)
+           (ui/label "Log:")
+           (ui/gap 0 10)
+           [:stretch 1
+            (ui/vscrollbar
+              (ui/vscroll
+                (ui/padding 0 10
+                  (ui/dynamic _ [log @*log]
+                    (ui/column
+                      (interpose (ui/gap 0 10)
+                        (for [op log]
+                          (ui/label op))))))))]
+           (ui/gap 0 10)
+           (ui/button
+             #(doseq [op @*log]
+                (println op))
+             (ui/label "Dump log")))]))))
 
 (defn redraw []
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
