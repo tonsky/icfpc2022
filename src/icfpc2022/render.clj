@@ -28,8 +28,8 @@
 
 (def *log 
   (atom
-    [[:pcut [0] 200 200]
-     [:color [0 1] 0xCC 0x33 0x33 0xFF]]))
+    [[:pcut [0] [200 200]]
+     [:color [0 1] [0xCC 0x33 0x33 0xFF]]]))
 
 (defmulti transform ; => picture'
   (fn [picture op]
@@ -49,7 +49,7 @@
      (SimpleBlock. [kind x y r t] color)
      (SimpleBlock. [kind l y x t] color)]))
 
-(defmethod transform :pcut [block [_ id x y]]
+(defmethod transform :pcut [block [_ id [x y]]]
   (defn go [block id]
     (let [[child-id & rest] id]
       (if (some? child-id)
@@ -61,7 +61,7 @@
           (ComplexBlock. (:shape block) (split-block block [x y]))))))
   (go block id))
 
-(defmethod transform :color [picture [_ id r g b a]]
+(defmethod transform :color [picture [_ id [r g b a]]]
   picture)
 
 (def *picture
@@ -118,10 +118,11 @@
               id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut id x y]
+                           [:pcut id [x y]]
+
                            :color
                            (let [[_ r g b a] tool]
-                             [:color id r g b a])
+                             [:color id [r g b a]])
                            
                            nil)]
             (swap! *log conj op)
