@@ -129,23 +129,27 @@
             (swap! *picture transform op)
             true))))))
 
+(def fill-guides
+  (paint/fill 0x40FF0000))
+
+(def stroke-guides
+  (paint/stroke 0x40FF0000 2))
+
 (defn draw-block [ctx ^Canvas canvas block id]
   (let [{:keys [scale]} ctx
-        [_ l b r t] (:shape block)]
+        [_ l b r t] (:shape block)
+        rect (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b)))]
+    (canvas/draw-rect canvas rect stroke-guides)
     (if (instance? ComplexBlock block)
       (dotimes [i (count (:children block))]
         (draw-block ctx canvas (nth (:children block) i) (str id "." i)))
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
-          (canvas/draw-rect canvas
-            (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b))) fill))))
+          (canvas/draw-rect canvas rect fill))))
     (canvas/draw-string canvas id
       (* scale (+ l 10))
       (* scale (- 400 b 10))
       (:font-ui ctx) (:fill-text ctx))))
-
-(def fill-guides
-  (paint/fill 0x40FF0000))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
   (let [{:keys [scale]} ctx]
