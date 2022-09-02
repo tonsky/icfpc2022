@@ -1,5 +1,6 @@
 (ns icfpc2022.render
   (:require
+    [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
     [io.github.humbleui.app :as app]
@@ -10,7 +11,7 @@
     [io.github.humbleui.ui :as ui]
     [nrepl.cmdline :as nrepl])
   (:import
-    [io.github.humbleui.skija Canvas Color]
+    [io.github.humbleui.skija Bitmap Canvas Color Image]
     [io.github.humbleui.types IPoint IRect Rect]))
 
 (set! *warn-on-reflection* true)
@@ -186,32 +187,39 @@
 (def stroke-guides
   (paint/stroke 0x40FF0000 2))
 
-(defn draw-block [ctx ^Canvas canvas block id]
+(defn draw-block [ctx ^Canvas canvas block id debug?]
   (let [{:keys [scale]} ctx
         [_ l b r t] (:shape block)
-        rect (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b)))]
-    (canvas/draw-rect canvas rect stroke-guides)
+        rect (IRect/makeLTRB l (- 400 t) r (- 400 b))]
+    (when debug?
+      (canvas/draw-rect canvas rect stroke-guides))
     (if (instance? ComplexBlock block)
       (dotimes [i (count (:children block))]
-        (draw-block ctx canvas (nth (:children block) i) (str id "." i)))
+        (draw-block ctx canvas (nth (:children block) i) (str id "." i) debug?))
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))
-    (canvas/draw-string canvas id
-      (* scale (+ l 10))
-      (* scale (- 400 b 10))
-      (:font-ui ctx) (:fill-text ctx))))
+    (when debug?
+      (canvas/draw-string canvas id
+        (+ l 10)
+        (- 400 b 10)
+        (:font-ui ctx) (:fill-text ctx)))))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
   (let [{:keys [scale]} ctx]
-    (with-open [fill (paint/fill 0xFFFFFFFF)]
-      (canvas/draw-rect canvas (IRect/makeXYWH 0 0 (* scale 400) (* scale 400)) fill))
-    (draw-block ctx canvas @*picture "")
+    (with-open [bitmap (Bitmap.)]
+      (.allocN32Pixels bitmap 400 400 true)
+      (let [canvas' (Canvas. bitmap)]
+        (with-open [fill (paint/fill 0xFFFFFFFF)]
+          (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
+        (draw-block ctx canvas' @*picture "" true))
+      (let [image (Image/makeFromBitmap bitmap)]
+        (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400)))))
     (when-some [[x y] @*coord]
       (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides)
       (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides))))
 
-(defn dump-log []
+(defn dump []
   (println "--- begin ---")
   (doseq [op @*log]
     (println
@@ -231,7 +239,18 @@
         :color
         (let [[_ id [r g b a]] op]
           (format "color [%s] [%d, %d, %d, %d]" (str/join "." id) r g b a)))))
-  (println "--- end ---"))
+  (println "--- end ---")
+  
+  (with-open [bitmap (Bitmap.)]
+    (.allocN32Pixels bitmap 400 400 true)
+    (let [canvas' (Canvas. bitmap)]
+      (with-open [fill (paint/fill 0xFFFFFFFF)]
+        (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
+      (draw-block nil canvas' @*picture "" false))
+    (let [image (Image/makeFromBitmap bitmap)
+          bytes (.getBytes (.encodeToData image))]
+      (with-open [os (io/output-stream "answers/1.png")]
+        (.write os bytes)))))
 
 (def app
   (ui/default-theme
@@ -304,8 +323,8 @@
                           (ui/label op))))))))]
            (ui/gap 0 10)
            (ui/button
-             dump-log
-             (ui/label "Dump log")))]))))
+             dump
+             (ui/label "Dump")))]))))
 
 (defn redraw []
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
