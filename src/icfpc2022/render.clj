@@ -22,11 +22,13 @@
                         ])
 
 (defrecord ComplexBlock [shape    ;; [:rect l b r t]
-                         children ;; { id (SimpleBlock | ComplexBlock) ... }
+                         children ;; [(SimpleBlock | ComplexBlock) ...]
                          ])
 
 (def start-picture
-  { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) })
+  { :counter 0
+    :blocks { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) }
+   })
 
 (def *log 
   (atom []))
@@ -73,39 +75,45 @@
      (SimpleBlock. [kind l y r t] color)]))
 
 (defmethod transform :color [picture [_ id color]]
-  (update picture id (fn [block]
-                       (assert (instance? SimpleBlock block) "Set color to Complex block")
-                       (assoc block :color color))))
+  (update-in picture [:blocks id] (fn [block]
+                                    (assert (instance? SimpleBlock block) "Set color to Complex block")
+                                    (assoc block :color color))))
 
 (defmethod transform :pcut [picture [_ id [x y]]]
-  (let [block (get picture id)
+  (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (pcut-block block [x y]))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
-    (-> picture
-      (dissoc id)
-      (merge (into {} new-blocks)))))
+    (update picture :blocks
+            (fn [blocks]
+              (-> blocks
+                  (dissoc id)
+                  (merge (into {} new-blocks)))))))
 
 (defmethod transform :xcut [picture [_ id x]]
-  (let [block (get picture id)
+  (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (xcut-block block x))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
-    (-> picture
-      (dissoc id)
-      (merge (into {} new-blocks)))))
+    (update picture :blocks
+            (fn [blocks]
+              (-> blocks
+                  (dissoc id)
+                  (merge (into {} new-blocks)))))))
 
 (defmethod transform :ycut [picture [_ id y]]
-  (let [block (get picture id)
+  (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (ycut-block block y))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
-    (-> picture
-      (dissoc id)
-      (merge (into {} new-blocks)))))
+    (update picture :blocks
+            (fn [blocks]
+              (-> blocks
+                  (dissoc id)
+                  (merge (into {} new-blocks)))))))
 
 (defn shape-width [shape]
   (let [[_ l b r t] shape]
@@ -121,14 +129,52 @@
     (= (shape-width shape1) (shape-width shape2))))
 
 (defmethod transform :swap [picture [_ id1 id2]]
-  (let [block1 (get picture id1)
+  (let [block1 (get-in picture [:blocks id1])
         shape1 (:shape block1)
-        block2 (get picture id2)
+        block2 (get-in picture [:blocks id2])
         shape2 (:shape block2)]
     (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
     (-> picture
-      (assoc-in [id1 :shape] shape2)
-      (assoc-in [id2 :shape] shape1))))
+      (assoc-in [:blocks id1 :shape] shape2)
+      (assoc-in [:blocks id2 :shape] shape1))))
+
+(defn merge-shapes [shape1 shape2]
+  (let [[kind1 l1 b1 r1 t1] shape1
+        [kind2 l2 b2 r2 t2] shape2]
+    (assert (= kind1 kind2 :rect))
+    (cond
+      ; shape1
+      ; shape2
+      (and (= b1 t2) (= l1 l2) (= r1 r2))
+      [:rect l1 b2 r1 t1]
+      ; shape2
+      ; shape1
+      (and (= b2 t1) (= l1 l2) (= r1 r2))
+      [:rect l1 b1 r1 t2]
+      ; shape1 shape2
+      (and (= r1 l2) (= b1 b2) (= t1 t2))
+      [:rect l1 b1 r2 t1]
+      ; shape2 shape1
+      (and (= r2 l1) (= b1 b2) (= t1 t2))
+      [:rect l2 b1 r1 t1]
+      :else
+      nil)))
+
+(defmethod transform :merge [picture [_ id1 id2]]
+  (let [block1 (get-in picture [:blocks id1])
+        shape1 (:shape block1)
+        block2 (get-in picture [:blocks id2])
+        shape2 (:shape block2)
+        merged-shape (merge-shapes shape1 shape2)]
+    (assert (some? merged-shape) "Blocks should be the same shape")
+    (let [picture (update picture :counter inc)
+          new-block (ComplexBlock. merged-shape [block1 block2])]
+      (update picture :blocks
+              (fn [blocks]
+                (-> blocks
+                    (assoc (str (:counter picture)) new-block)
+                    (dissoc id1)
+                    (dissoc id2)))))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -175,7 +221,9 @@
     (<= b y t)))
 
 (defn find-block-id [picture [x y]]
-  (let [[id block] (first (filter (fn [[id block]] (inside? (:shape block) [x y])) picture))]
+  (let [[id block] (first (filter (fn [[id block]]
+                                    (inside? (:shape block) [x y]))
+                                  (:blocks picture)))]
     id))
 
 (defn event [ctx event]
@@ -214,6 +262,14 @@
                                  [:swap id1 id])
                                (do (swap! *tool (fn [_] [:swap id]))
                                  nil)))
+
+                           :merge
+                           (let [[_ id1] tool]
+                             (if (some? id1)
+                               (do (swap! *tool (fn [_] [:merge]))
+                                   [:merge id1 id])
+                               (do (swap! *tool (fn [_] [:merge id]))
+                                   nil)))
                            nil)]
             (swap! *picture transform op)
             (swap! *log conj op)
@@ -229,7 +285,8 @@
   (let [[_ l b r t] (:shape block)
         rect (IRect/makeLTRB l (- 400 t) r (- 400 b))]
     (if (instance? ComplexBlock block)
-      (assert false "Not implemented")
+      (doseq [nested-block (:children block)]
+        (draw-block canvas nested-block nil))
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))))
@@ -275,7 +332,7 @@
     (math/round (/ (* base 400 400) area))))
 
 (defn draw-picture [^Canvas canvas picture]
-  (doseq [[id block] picture]
+  (doseq [[id block] (:blocks picture)]
     (draw-block canvas block id)))
 
 (defn ^Bitmap render-to-bitmap [picture]
@@ -290,10 +347,10 @@
 
 (defn draw-guides [ctx ^Canvas canvas picture]
   (let [{:keys [scale]} ctx]
-    (doseq [[id block] picture
-            :let [[_ l b r t] (:shape block)
-                  rect (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b)))]]
-      (canvas/draw-rect canvas rect stroke-guides))))
+    (doseq [[id block] (:blocks picture)]
+      (let [[_ l b r t] (:shape block)
+            rect (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b)))]
+        (canvas/draw-rect canvas rect stroke-guides)))))
 
 (defn draw-cursor [ctx ^Canvas canvas]
   (let [{:keys [scale]} ctx]
@@ -326,7 +383,11 @@
 
         :swap
         (let [[_ id1 id2] op]
-          (format "swap [%s] [%s]" id1 id2)))))
+          (format "swap [%s] [%s]" id1 id2))
+
+        :merge
+        (let [[_ id1 id2] op]
+          (format "merge [%s] [%s]" id1 id2)))))
   (println "--- end ---"))
 
 (defn tool [tool label]
@@ -447,7 +508,11 @@
              (ui/gap 10 0)
              [:stretch 1
               (tool [:swap]
-                (ui/label "↔︎"))])
+                (ui/label "↔︎"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:merge]
+                    (ui/label "M"))])
 
            (ui/gap 0 10)
 
