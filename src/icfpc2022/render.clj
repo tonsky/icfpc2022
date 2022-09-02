@@ -323,9 +323,10 @@
                 :ycut  7
                 :pcut  10
                 :color 5
-                :swap  3} (first op))
+                :swap  3
+                :merge 1} (first op))
         id    (second op)
-        block (picture id)
+        block (get-in picture [:blocks id])
         [_ l b r t] (:shape block)
         area  (* (- r l) (- t b))]
     (math/round (/ (* base 400 400) area))))
