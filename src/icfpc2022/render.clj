@@ -76,8 +76,7 @@
 
 (defmethod transform :color [picture [_ id color]]
   (update-in picture [:blocks id] (fn [block]
-                                    (assert (instance? SimpleBlock block) "Set color to Complex block")
-                                    (assoc block :color color))))
+                                    (SimpleBlock. (:shape block) color))))
 
 (defmethod transform :pcut [picture [_ id [x y]]]
   (let [block (get-in picture [:blocks id])
