@@ -62,6 +62,23 @@
       (< 0 x 400)   [x y]
       (< -420 x -20) [(+ x 420) y])))
 
+(defn contains? [[_ l b r t] [x y]]
+  (and
+    (<= l x r)
+    (<= b y t)))
+
+(defn find-leaf [block id [x y]]
+  (when (contains? (:shape block) [x y])
+    (if (instance? ComplexBlock block)
+      (reduce
+        (fn [i child]
+          (if-some [id' (find-leaf child (conj id i) [x y])]
+            (reduced id')
+            (inc i)))
+        0
+        (:children block))
+      id)))
+
 (defn event [ctx event]
   (core/eager-or
     (when (= :mouse-move (:event event))
@@ -74,14 +91,17 @@
             (= :primary (:button event))
             (:pressed? event))
       (when-some [[x y] (coords ctx event)]
-        (println x y event @*tool)
-        (let [tool @*tool]
+        (let [tool @*tool
+              id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut x y]
+                           [:pcut id x y]
+                           
+                           :color
+                           (let [[_ r g b a] tool]
+                             [:color id r g b a])
                            
                            nil)]
-            (println op)
             (swap! *log conj op)
             (swap! *picture transform op)
             true))))))
