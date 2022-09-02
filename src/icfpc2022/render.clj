@@ -127,8 +127,16 @@
                           (< 400 y)   nil
                           (< 0 x 400)    [x y]
                           (< -420 x -20) [(+ x 420) y])]
-      (if (= [:pcut] @*tool)
+      (case (first @*tool)
+        :pcut
         [(round-to x' 40) (round-to y' 40)]
+        
+        :xcut 
+        [(round-to x' 40) y']
+        
+        :ycut
+        [x' (round-to y' 40)]
+        
         [x' y']))))
 
 (defn inside? [[_ l b r t] [x y]]
@@ -216,8 +224,10 @@
       (let [image (Image/makeFromBitmap bitmap)]
         (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400)))))
     (when-some [[x y] @*coord]
-      (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides)
-      (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides))))
+      (when (#{:pcut :xcut} (first @*tool))
+        (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides))
+      (when (#{:pcut :ycut} (first @*tool))
+        (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides)))))
 
 (defn dump []
   (println "--- begin ---")
