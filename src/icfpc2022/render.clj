@@ -1,5 +1,6 @@
 (ns icfpc2022.render
   (:require
+    [clojure.math :as math]
     [clojure.string :as str]
     [io.github.humbleui.app :as app]
     [io.github.humbleui.canvas :as canvas]
@@ -79,17 +80,25 @@
 (def *tool
   (atom [:pcut]))
 
+(defn round-to [x v]
+  (-> x
+    (/ v)
+    (math/round)
+    (* v)
+    (int)))
+
 (defn coords [ctx event]
   (let [x (int (quot (:x event) (:scale ctx)))
         y (int (- 400 (quot (:y event) (:scale ctx))))]
-    (cond
-      (< x -420)  nil
-      (< -20 x 0) nil
-      (< 400 x)   nil
-      (< y 0)     nil
-      (< 400 y)   nil
-      (< 0 x 400)   [x y]
-      (< -420 x -20) [(+ x 420) y])))
+    (when-some [[x' y'] (cond
+                          (< x -420)  nil
+                          (< -20 x 0) nil
+                          (< 400 x)   nil
+                          (< y 0)     nil
+                          (< 400 y)   nil
+                          (< 0 x 400)    [x y]
+                          (< -420 x -20) [(+ x 420) y])]
+      [x y])))
 
 (defn inside? [[_ l b r t] [x y]]
   (and
@@ -124,7 +133,7 @@
               id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut id [x y]]
+                           [:pcut id [(round-to x 40) (round-to y 40)]]
 
                            :color
                            (let [[_ r g b a] tool]
@@ -222,6 +231,12 @@
            (ui/button
              #(reset! *tool [:color 0x0 0x4A 0xAD 255])
              (ui/label "Fill Blue"))
+           (ui/gap 0 10)
+           (ui/button
+             #(do
+                (reset! *log [])
+                (reset! *picture start-picture))
+             (ui/label "RESET"))
 
            (ui/gap 0 20)
            (ui/label "Log:")
