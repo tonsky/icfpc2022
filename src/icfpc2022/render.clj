@@ -202,7 +202,7 @@
     n))
 
 (def problem
-  "3")
+  "2")
 
 (def snap
   (case problem
@@ -377,13 +377,6 @@
          area  (* (- r l) (- t b))]
      (math/round (/ (* base 400 400) area)))))
 
-(defn score []
-  (with-open [bitmap (render-to-bitmap @*picture)]
-    (let [pixels (.readPixels bitmap)
-          sim    (similarity original-bytes pixels)
-          cost   (cost @*log)]
-      (+ cost sim))))
-
 (defn draw-picture [^Canvas canvas picture]
   (doseq [[id block] (:blocks picture)]
     (draw-block canvas block id)))
@@ -397,6 +390,13 @@
         (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
       (draw-picture canvas' picture))
     bitmap))
+
+(defn score []
+  (with-open [bitmap (render-to-bitmap @*picture)]
+    (let [pixels (.readPixels bitmap)
+          sim    (similarity original-bytes pixels)
+          cost   (cost @*log)]
+      (+ cost sim))))
 
 (defn draw-guides [ctx ^Canvas canvas picture]
   (let [{:keys [scale]} ctx]
