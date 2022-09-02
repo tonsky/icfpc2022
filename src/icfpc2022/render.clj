@@ -7,6 +7,7 @@
     [io.github.humbleui.canvas :as canvas]
     [io.github.humbleui.core :as core]
     [io.github.humbleui.paint :as paint]
+    [io.github.humbleui.protocols :as protocols]
     [io.github.humbleui.window :as window]
     [io.github.humbleui.ui :as ui]
     [nrepl.cmdline :as nrepl])
@@ -29,6 +30,9 @@
 
 (def *log 
   (atom []))
+
+(def *guides?
+  (atom true))
 
 (def *preview
   (atom nil))
@@ -77,31 +81,31 @@
   (let [block (get picture id)
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
-                                 (pcut-block block [x y]))]
+                      (pcut-block block [x y]))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (-> picture
-        (dissoc id)
-        (merge (into {} new-blocks)))))
+      (dissoc id)
+      (merge (into {} new-blocks)))))
 
 (defmethod transform :xcut [picture [_ id x]]
   (let [block (get picture id)
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
-                                 (xcut-block block x))]
+                      (xcut-block block x))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (-> picture
-        (dissoc id)
-        (merge (into {} new-blocks)))))
+      (dissoc id)
+      (merge (into {} new-blocks)))))
 
 (defmethod transform :ycut [picture [_ id y]]
   (let [block (get picture id)
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
-                                 (ycut-block block y))]
+                      (ycut-block block y))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (-> picture
-        (dissoc id)
-        (merge (into {} new-blocks)))))
+      (dissoc id)
+      (merge (into {} new-blocks)))))
 
 (defn shape-width [shape]
   (let [[_ l b r t] shape]
@@ -113,8 +117,8 @@
 
 (defn same-shape? [shape1 shape2]
   (and (= (first shape1) (first shape2))
-       (= (shape-height shape1) (shape-height shape2))
-       (= (shape-width shape1) (shape-width shape2))))
+    (= (shape-height shape1) (shape-height shape2))
+    (= (shape-width shape1) (shape-width shape2))))
 
 (defmethod transform :swap [picture [_ id1 id2]]
   (let [block1 (get picture id1)
@@ -123,8 +127,8 @@
         shape2 (:shape block2)]
     (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
     (-> picture
-        (assoc id1 (assoc block2 :shape shape1))
-        (assoc id2 (assoc block1 :shape shape2)))))
+      (assoc id1 (assoc block2 :shape shape1))
+      (assoc id2 (assoc block1 :shape shape2)))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -177,9 +181,8 @@
 (defn event [ctx event]
   (core/eager-or
     (when (= :mouse-move (:event event))
-      (when-some [[x y] (coords ctx event)]
-        (reset! *coord [x y])
-        true))
+      (reset! *coord (coords ctx event))
+      true)
 
     (when (and
             (= :mouse-button (:event event))
@@ -206,9 +209,9 @@
                            (let [[_ id1] tool]
                              (if (some? id1)
                                (do (swap! *tool (fn [_] [:swap]))
-                                   [:swap id1 id])
+                                 [:swap id1 id])
                                (do (swap! *tool (fn [_] [:swap id]))
-                                   nil)))
+                                 nil)))
                            nil)]
             (swap! *picture transform op)
             (swap! *log conj op)
@@ -220,39 +223,57 @@
 (def stroke-guides
   (paint/stroke 0xFFFF8080 2))
 
-(defn draw-block [^Canvas canvas block id debug?]
+(defn draw-block [^Canvas canvas block id]
   (let [[_ l b r t] (:shape block)
         rect (IRect/makeLTRB l (- 400 t) r (- 400 b))]
     (if (instance? ComplexBlock block)
       (assert false "Not implemented")
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
-          (canvas/draw-rect canvas rect fill))))
-    (when debug?
-      (canvas/draw-rect canvas rect stroke-guides))))
+          (canvas/draw-rect canvas rect fill))))))
 
-(defn draw-picture [^Canvas canvas picture debug?]
+(defn similarity [^bytes p1 ^bytes p2]
+  0
+  #_(loop [i   0
+           res 0.0]
+      (if (>= i (alength p1))
+        (math/round (* res 0.005))
+        (let [r1 (nth p1 (+ i 0))
+              g1 (nth p1 (+ i 1))
+              b1 (nth p1 (+ i 2))
+              a1 (nth p1 (+ i 3))
+              r2 (nth p2 (+ i 0))
+              g2 (nth p2 (+ i 1))
+              b2 (nth p2 (+ i 2))
+              a2 (nth p2 (+ i 3))]
+          (recur (+ i 4) (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
+                                             (* (- g1 g2) (- g1 g2))
+                                             (* (- b1 b2) (- b1 b2))
+                                             (* (- a1 a2) (- a1 a2)))))))))
+  )
+
+(defn draw-picture [^Canvas canvas picture]
   (doseq [[id block] picture]
-    (draw-block canvas block id debug?)))
+    (draw-block canvas block id)))
 
-(defn ^Bitmap render-to-bitmap [picture debug?]
+(defn ^Bitmap render-to-bitmap [picture]
   (let [bitmap (Bitmap.)]
     (.allocN32Pixels bitmap 400 400 true)
     (let [canvas' (Canvas. bitmap)]
       (with-open [fill (paint/fill 0xFFFFFFFF)]
         (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
-      (draw-picture canvas' picture debug?))
+      (draw-picture canvas' picture))
     bitmap))
 
-(defn draw [ctx ^Canvas canvas ^IPoint size]
-  (let [{:keys [scale]} ctx
-        preview @*preview
-        picture (if preview
-                  (reduce transform start-picture (take preview @*log))
-                  @*picture)]
-    (with-open [bitmap (render-to-bitmap picture true)
-                image  (Image/makeFromBitmap bitmap)]
-      (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400))))
+(defn draw-guides [ctx ^Canvas canvas picture]
+  (let [{:keys [scale]} ctx]
+    (doseq [[id block] picture
+            :let [[_ l b r t] (:shape block)
+                  rect (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b)))]]
+      (canvas/draw-rect canvas rect stroke-guides))))
+
+(defn draw-cursor [ctx ^Canvas canvas]
+  (let [{:keys [scale]} ctx]
     (when-some [[x y] @*coord]
       (when (#{:pcut :xcut} (first @*tool))
         (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides))
@@ -292,105 +313,162 @@
       {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
       label)))
 
+(defonce ^Image original-image
+  (Image/makeFromEncoded (core/slurp-bytes "resources/1.png")))
+
+(defonce ^Bitmap original-bitmap
+  (Bitmap/makeFromImage original-image))
+
+(defonce original-bytes
+  (.readPixels original-bitmap))
+
+(core/deftype+ Stack [children ^:mut my-rect]
+  protocols/IComponent
+  (-measure [_ ctx cs]
+    (reduce
+      (fn [size child]
+        (let [{:keys [width height]} (core/measure child ctx cs)]
+          (IPoint. (max (:width size) width) (max (:height size) height))))
+      (IPoint. 0 0) children))
+  
+  (-draw [_ ctx ^IRect rect ^Canvas canvas]
+    (set! my-rect rect)
+    (doseq [child children]
+      (core/draw-child child ctx rect canvas)))
+  
+  (-event [_ ctx event]
+    (reduce core/eager-or false
+      (for [child children]
+        (core/event-child child ctx event))))
+  
+  (-iterate [this ctx cb]
+    (or
+      (cb this)
+      (some #(protocols/-iterate % ctx cb) children))))
+
+(defn stack [& children]
+  (->Stack children nil))
+
 (def app
   (ui/default-theme
     {:hui.text-field/padding-top    10
      :hui.text-field/padding-bottom 10
      :hui.text-field/padding-left   5
      :hui.text-field/padding-right  5}
-    (ui/padding 20
-      (ui/row
-        (ui/valign 0.5
-          (ui/width 400
-            (ui/height 400
-              (ui/image "resources/1.png"))))
-        (ui/gap 20 0)
-        (ui/valign 0.5
-          (ui/width 400
-            (ui/height 400
-              (ui/dynamic _ [preview *preview
-                             picture *picture]
-                (ui/canvas {:on-paint draw
-                            :on-event event})))))
-        (ui/gap 20 0)
-        [:stretch 1
-         (ui/column
-           (ui/row
-             [:stretch 1
-              (tool [:pcut]
-                (ui/label "╋"))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:xcut]
-                (ui/label "┃"))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:ycut]
-                (ui/label "━"))])
+    (ui/dynamic _ [picture (if-some [preview @*preview]
+                             (reduce transform start-picture (take preview @*log))
+                             @*picture)]
+      (with-open [bitmap (render-to-bitmap picture)]
+        (let [pixels nil #_(.readPixels bitmap)]
+          (ui/padding 20
+            (ui/row
+              (ui/valign 0.5
+                (ui/width 400
+                  (ui/height 400
+                    (ui/->AnImage original-image))))
+              (ui/gap 20 0)
+              (ui/valign 0.5
+                (ui/width 400
+                  (ui/height 400
+                    (stack
+                      (ui/->AnImage (Image/makeFromBitmap bitmap))
+                      (ui/dynamic _ [coord  @*coord
+                                     guides? @*guides?]
+                        (ui/canvas {:on-paint (fn [ctx canvas size]
+                                                (when guides?
+                                                  (draw-guides ctx canvas picture))
+                                                (draw-cursor ctx canvas))
+                                    :on-event event}))))))
+              (ui/gap 20 0)
+              [:stretch 1
+               (ui/column
+                 (ui/row
+                   [:stretch 1
+                    (tool [:pcut]
+                      (ui/label "╋"))]
+                   (ui/gap 10 0)
+                   [:stretch 1
+                    (tool [:xcut]
+                      (ui/label "┃"))]
+                   (ui/gap 10 0)
+                   [:stretch 1
+                    (tool [:ycut]
+                      (ui/label "━"))]
+                   (ui/gap 10 0)
+                   [:stretch 1
+                    (tool [:swap]
+                      (ui/label "↔︎"))])
 
-           (ui/gap 0 10)
+                 (ui/gap 0 10)
 
-           (ui/row
-             [:stretch 1
-              (tool [:color 255 255 255 255]
-                (ui/rect (paint/fill 0xFFFFFFFF)
-                  (ui/gap 30 20)))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:color 0 0 0 255]
-                (ui/rect (paint/fill 0xFF000000)
-                  (ui/gap 30 20)))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:color 0x0 0x4A 0xAD 255]
-                (ui/rect (paint/fill 0xFF004AAD)
-                  (ui/gap 30 20)))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:swap]
-                    (ui/label "<->"))])
+                 (ui/row
+                   [:stretch 1
+                    (tool [:color 255 255 255 255]
+                      (ui/rect (paint/fill 0xFFFFFFFF)
+                        (ui/gap 30 20)))]
+                   (ui/gap 10 0)
+                   [:stretch 1
+                    (tool [:color 0 0 0 255]
+                      (ui/rect (paint/fill 0xFF000000)
+                        (ui/gap 30 20)))]
+                   (ui/gap 10 0)
+                   [:stretch 1
+                    (tool [:color 0x0 0x4A 0xAD 255]
+                      (ui/rect (paint/fill 0xFF004AAD)
+                        (ui/gap 30 20)))])
 
-           (ui/gap 0 10)
+                 (ui/gap 0 10)
+           
+                 (ui/checkbox
+                   *guides?
+                   (ui/label "Guides"))
+           
+                 (ui/gap 0 10)
 
-           (ui/button
-             #(do
-                (reset! *log [])
-                (reset! *picture start-picture))
-             (ui/label "RESET"))
+                 (ui/button
+                   #(do
+                      (reset! *log [])
+                      (reset! *picture start-picture))
+                   (ui/label "RESET"))
 
-           (ui/gap 0 10)
-           (ui/dynamic _ [coord @*coord]
-             (ui/label (str "Mouse: " coord)))
+                 (ui/gap 0 10)
+                 (ui/dynamic _ [coord @*coord]
+                   (ui/label (str "Mouse: " coord)))
+             
+                 (ui/gap 0 10)
+             
+                 (ui/dynamic _ [similarity (similarity original-bytes pixels)]
+                   (ui/label (str "Similarity: " similarity)))
 
-           (ui/gap 0 10)
-           (ui/label "Log:")
-           (ui/gap 0 10)
+                 (ui/gap 0 20)
+                 (ui/label "Log:")
+                 (ui/gap 0 10)
 
-           [:stretch 1
-            (ui/dynamic _ [log @*log]
-              (ui/vscrollbar
-                (ui/vscroll
-                  (ui/column
-                    (for [[idx op] (reverse (map vector (next (range)) log))]
-                      (ui/clickable
-                        {:on-click
-                         (fn [_]
-                           (swap! *log #(vec (take idx %)))
-                           (reset! *picture (reduce transform start-picture @*log)))}
-                        (ui/hoverable
-                          {:on-hover #(reset! *preview idx)
-                           :on-out   (fn [] (swap! *preview #(if (= idx %) nil %)))}
-                          (ui/dynamic ctx [hovered? (:hui/hovered? ctx)]
-                            (let [label (ui/padding 10 10
-                                          (ui/label (str idx ". " op)))]
-                              (if hovered?
-                                (ui/rect (paint/fill 0xFFEEEEEE)
-                                  label)
-                                label))))))))))]
+                 [:stretch 1
+                  (ui/dynamic _ [log @*log]
+                    (ui/vscrollbar
+                      (ui/vscroll
+                        (ui/column
+                          (for [[idx op] (reverse (map vector (next (range)) log))]
+                            (ui/clickable
+                              {:on-click
+                               (fn [_]
+                                 (swap! *log #(vec (take idx %)))
+                                 (reset! *picture (reduce transform start-picture @*log)))}
+                              (ui/hoverable
+                                {:on-hover #(reset! *preview idx)
+                                 :on-out   (fn [] (swap! *preview #(if (= idx %) nil %)))}
+                                (ui/dynamic ctx [hovered? (:hui/hovered? ctx)]
+                                  (let [label (ui/padding 10 10
+                                                (ui/label (str idx ". " op)))]
+                                    (if hovered?
+                                      (ui/rect (paint/fill 0xFFEEEEEE)
+                                        label)
+                                      label))))))))))]
 
-           (ui/gap 0 10)
-           (ui/button dump
-             (ui/label "Dump")))]))))
+                 (ui/gap 0 10)
+                 (ui/button dump
+                   (ui/label "Dump")))])))))))
 
 (defn redraw []
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
