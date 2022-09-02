@@ -46,7 +46,7 @@
                    :on-paint #'on-paint
                    :on-event #'on-event})]
     ; (window/set-z-order window :floating)
-    ; (reset! debug/*enabled? true)
+    (reset! debug/*enabled? true)
     (window/set-title window "ICFPC 2022 × Humble UI 🐝")
     (when (= :macos app/platform)
       (window/set-icon window "resources/icon.icns"))
