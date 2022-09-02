@@ -159,6 +159,16 @@
       :else
       nil)))
 
+(defn list-simple-blocks [block]
+  (cond
+    (instance? SimpleBlock block)
+    [block]
+
+    (instance? ComplexBlock block)
+    (mapcat (fn [block] (list-simple-blocks block)) (:children block))
+
+    :else (assert false (str "Unexpected block type: " block))))
+
 (defmethod transform :merge [picture [_ id1 id2]]
   (let [block1 (get-in picture [:blocks id1])
         shape1 (:shape block1)
@@ -167,7 +177,8 @@
         merged-shape (merge-shapes shape1 shape2)]
     (assert (some? merged-shape) "Blocks should be the same shape")
     (let [picture (update picture :counter inc)
-          new-block (ComplexBlock. merged-shape [block1 block2])]
+          new-block (ComplexBlock. merged-shape (into (list-simple-blocks block1)
+                                                      (list-simple-blocks block2)))]
       (update picture :blocks
         (fn [blocks]
           (-> blocks
