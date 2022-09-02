@@ -103,6 +103,29 @@
         (dissoc id)
         (merge (into {} new-blocks)))))
 
+(defn shape-width [shape]
+  (let [[_ l b r t] shape]
+    (- r l)))
+
+(defn shape-height [shape]
+  (let [[_ l b r t] shape]
+    (- t b)))
+
+(defn same-shape? [shape1 shape2]
+  (and (= (first shape1) (first shape2))
+       (= (shape-height shape1) (shape-height shape2))
+       (= (shape-width shape1) (shape-width shape2))))
+
+(defmethod transform :swap [picture [_ id1 id2]]
+  (let [block1 (get picture id1)
+        shape1 (:shape block1)
+        block2 (get picture id2)
+        shape2 (:shape block2)]
+    (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
+    (-> picture
+        (assoc id1 (assoc block2 :shape shape1))
+        (assoc id2 (assoc block1 :shape shape2)))))
+
 (def *picture
   (atom (reduce transform start-picture @*log)))
 
@@ -178,7 +201,14 @@
                            :color
                            (let [[_ r g b a] tool]
                              [:color id [r g b a]])
-                           
+
+                           :swap
+                           (let [[_ id1] tool]
+                             (if (some? id1)
+                               (do (swap! *tool (fn [_] [:swap]))
+                                   [:swap id1 id])
+                               (do (swap! *tool (fn [_] [:swap id]))
+                                   nil)))
                            nil)]
             (swap! *picture transform op)
             (swap! *log conj op)
@@ -236,19 +266,23 @@
       (case (first op)
         :pcut
         (let [[_ id [x y]] op]
-          (format "cut [%s] [%d, %d]" (str/join "." id) x y))
+          (format "cut [%s] [%d, %d]" id x y))
 
         :xcut
         (let [[_ id x] op]
-          (format "cut [%s] [x] [%d]" (str/join "." id) x))
+          (format "cut [%s] [x] [%d]" id x))
 
         :ycut
         (let [[_ id y] op]
-          (format "cut [%s] [y] [%d]" (str/join "." id) y))
+          (format "cut [%s] [y] [%d]" id y))
 
         :color
         (let [[_ id [r g b a]] op]
-          (format "color [%s] [%d, %d, %d, %d]" (str/join "." id) r g b a)))))
+          (format "color [%s] [%d, %d, %d, %d]" id r g b a))
+
+        :swap
+        (let [[_ id1 id2] op]
+          (format "swap [%s] [%s]" id1 id2)))))
   (println "--- end ---"))
 
 (defn tool [tool label]
@@ -310,7 +344,11 @@
              [:stretch 1
               (tool [:color 0x0 0x4A 0xAD 255]
                 (ui/rect (paint/fill 0xFF004AAD)
-                  (ui/gap 30 20)))])
+                  (ui/gap 30 20)))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:swap]
+                    (ui/label "<->"))])
 
            (ui/gap 0 10)
 
