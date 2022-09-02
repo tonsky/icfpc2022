@@ -9,7 +9,7 @@
     [io.github.humbleui.ui :as ui]
     [nrepl.cmdline :as nrepl])
   (:import
-    [io.github.humbleui.skija Canvas]
+    [io.github.humbleui.skija Canvas Color]
     [io.github.humbleui.types IPoint IRect Rect]))
 
 (set! *warn-on-reflection* true)
@@ -22,18 +22,26 @@
                          children ;; [(SimpleBlock | ComplexBlock) ...]
                          ])
 
-(defonce *picture
-  (atom [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
+(def start-picture
+  (ComplexBlock. [:rect 0 0 400 400]
+    [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
+
+(def *log 
+  [[:pcut [0] 200 200]
+   [:color [0 1] 0xCC 0x33 0x33 0xFF]])
 
 (defmulti transform ; => picture'
   (fn [picture op]
     (first op)))
 
 (defmethod transform :pcut [picture [_ id x y]]
-  )
+  picture)
 
 (defmethod transform :color [picture [_ id r g b a]]
-  )
+  picture)
+
+(def *picture
+  (atom (reduce transform start-picture *log)))
 
 (defonce *coord
   (atom (IPoint. 0 0)))
@@ -54,12 +62,25 @@
         (< x 400)     (reset! *coord (IPoint. x y))
         (< 420 x 820) (reset! *coord (IPoint. (- x 420) y))))))
 
+(defn draw-block [ctx ^Canvas canvas block id]
+  (let [{:keys [scale]} ctx
+        [_ l b r t] (:shape block)]
+    (if (instance? ComplexBlock block)
+      (dotimes [i (count (:children block))]
+        (draw-block ctx canvas (nth (:children block) i) (str id "." i)))
+      (let [[red green blue alpha] (:color block)]
+        (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
+          (canvas/draw-rect canvas
+            (IRect/makeLTRB (* scale l) (* scale (- 400 t)) (* scale r) (* scale (- 400 b))) fill))))
+    (canvas/draw-string canvas id
+      (* scale (+ l 10))
+      (* scale (- 400 b 10))
+      (:font-ui ctx) (:fill-text ctx))))
+
 (defn draw [ctx ^Canvas canvas ^IPoint size]
-  (let [{:keys [scale]} ctx]
-    (with-open [fill   (paint/fill 0xFFFFFFFF)
-                stroke (paint/stroke 0xFFCC3333 (* 2 scale))]
-      (canvas/draw-rect canvas (IRect/makeXYWH 0 0 (:width size) (:height size)) fill)
-      )))
+  (with-open [fill (paint/fill 0xFFFFFFFF)]
+    (canvas/draw-rect canvas (IRect/makeXYWH 0 0 800 800) fill))
+  (draw-block ctx canvas @*picture ""))
 
 (def app
   (ui/default-theme
