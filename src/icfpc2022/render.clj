@@ -127,8 +127,8 @@
         shape2 (:shape block2)]
     (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
     (-> picture
-      (assoc id1 (assoc block2 :shape shape1))
-      (assoc id2 (assoc block1 :shape shape2)))))
+        (assoc-in [id1 :shape] shape2)
+        (assoc-in [id2 :shape] shape1))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
