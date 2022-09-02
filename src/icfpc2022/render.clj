@@ -35,8 +35,31 @@
   (fn [picture op]
     (first op)))
 
-(defmethod transform :pcut [picture [_ id x y]]
-  picture)
+
+(defn split-block [simple-block [x y]]
+  (let [[kind l b r t] (:shape simple-block)
+        color (:color simple-block)]
+    (assert (= kind :rect))
+    (assert (and (< x r)
+                 (< l x)
+                 (< y t)
+                 (< b y)))
+    [(SimpleBlock. [kind l b x y] color)
+     (SimpleBlock. [kind x b r y] color)
+     (SimpleBlock. [kind x y r t] color)
+     (SimpleBlock. [kind l y x t] color)]))
+
+(defmethod transform :pcut [block [_ id x y]]
+  (defn go [block id]
+    (let [[child-id & rest] id]
+      (if (some? child-id)
+        (do
+          (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
+          (update-in block [:children child-id] (fn [child] (go child rest))))
+        (do
+          (assert (instance? SimpleBlock block) (str "Expected simple block"))
+          (ComplexBlock. (:shape block) (split-block block [x y]))))))
+  (go block id))
 
 (defmethod transform :color [picture [_ id r g b a]]
   picture)
@@ -85,7 +108,7 @@
       (when-some [[x y] (coords ctx event)]
         (reset! *coord [x y])
         true))
-  
+
     (when (and
             (= :mouse-button (:event event))
             (= :primary (:button event))
@@ -95,9 +118,8 @@
               id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut id x y]
-                           
-                           :color
+                           [:pcut idx y]
+:color
                            (let [[_ r g b a] tool]
                              [:color id r g b a])
                            
@@ -175,7 +197,7 @@
            (ui/button
              #(reset! *tool [:color 0x0 0x4A 0xAD 255])
              (ui/label "Fill Blue"))
-           
+
            (ui/gap 0 20)
            (ui/label "Log:")
            (ui/gap 0 10)
