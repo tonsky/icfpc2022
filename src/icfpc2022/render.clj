@@ -98,7 +98,9 @@
                           (< 400 y)   nil
                           (< 0 x 400)    [x y]
                           (< -420 x -20) [(+ x 420) y])]
-      [x y])))
+      (if (= [:pcut] @*tool)
+        [(round-to x' 40) (round-to y' 40)]
+        [x' y']))))
 
 (defn inside? [[_ l b r t] [x y]]
   (and
@@ -133,7 +135,7 @@
               id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut id [(round-to x 40) (round-to y 40)]]
+                           [:pcut id [x y]]
 
                            :color
                            (let [[_ r g b a] tool]
