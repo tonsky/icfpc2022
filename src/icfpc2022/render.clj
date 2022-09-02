@@ -236,15 +236,15 @@
       (case (first op)
         :pcut
         (let [[_ id [x y]] op]
-          (format "pcut [%s] [%d, %d]" (str/join "." id) x y))
+          (format "cut [%s] [%d, %d]" (str/join "." id) x y))
 
         :xcut
         (let [[_ id x] op]
-          (format "lcut [%s] %d" (str/join "." id) x))
+          (format "cut [%s] [x] [%d]" (str/join "." id) x))
 
         :ycut
         (let [[_ id y] op]
-          (format "lcut [%s] %d" (str/join "." id) y))
+          (format "cut [%s] [y] [%d]" (str/join "." id) y))
 
         :color
         (let [[_ id [r g b a]] op]
