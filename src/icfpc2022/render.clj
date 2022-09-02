@@ -127,8 +127,8 @@
         shape2 (:shape block2)]
     (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
     (-> picture
-        (assoc-in [id1 :shape] shape2)
-        (assoc-in [id2 :shape] shape1))))
+      (assoc-in [id1 :shape] shape2)
+      (assoc-in [id2 :shape] shape1))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -262,6 +262,18 @@
                                            (* (- b1 b2) (- b1 b2))
                                            (* (- a1 a2) (- a1 a2))))))))))
 
+(defn cost [picture op]
+  (let [base  ({:xcut  7
+                :ycut  7
+                :pcut  10
+                :color 5
+                :swap  3} (first op))
+        id    (second op)
+        block (picture id)
+        [_ l b r t] (:shape block)
+        area  (* (- r l) (- t b))]
+    (math/round (/ (* base 400 400) area))))
+
 (defn draw-picture [^Canvas canvas picture]
   (doseq [[id block] picture]
     (draw-block canvas block id)))
@@ -377,12 +389,21 @@
             (ui/height 400
               (ui/->AnImage original-image))))
         (ui/gap 20 0)
-        (ui/dynamic _ [picture (if-some [preview @*preview]
-                                 (reduce transform start-picture (take preview @*log))
+        (ui/dynamic _ [log     (if-some [preview @*preview]
+                                 (take preview @*log)
+                                 @*log)
+                       picture (if-some [preview @*preview]
+                                 (reduce transform start-picture log)
                                  @*picture)]
           (with-open [bitmap (render-to-bitmap picture)]
-            (let [pixels (.readPixels bitmap)]
-
+            (let [pixels   (.readPixels bitmap)
+                  sim      (similarity original-bytes pixels)
+                  [_ cost] (reduce
+                                          (fn [[pic acc] op]
+                                            [(transform pic op)
+                                             (+ acc (cost pic op))])
+                                          [start-picture 0]
+                                          log)]
               (ui/column
                 (ui/width 400
                   (ui/height 400
@@ -394,7 +415,20 @@
                                               (draw-cursor ctx canvas))
                                   :on-event event}))))
                 (ui/gap 0 10)
-                (ui/label (str "Similarity: " (similarity original-bytes pixels)))))))
+                (ui/row
+                  (ui/column
+                    (ui/label "Total Score:")
+                    (ui/gap 0 10)
+                    (ui/label "Similarity:")
+                    (ui/gap 0 10)
+                    (ui/label "Cost:"))
+                  (ui/gap 10 0)
+                  (ui/column
+                    (ui/label (+ sim cost))
+                    (ui/gap 0 10)
+                    (ui/label sim)
+                    (ui/gap 0 10)
+                    (ui/label cost)))))))
         (ui/gap 20 0)
         [:stretch 1
          (ui/column
