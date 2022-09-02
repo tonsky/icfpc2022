@@ -34,7 +34,7 @@
   (fn [picture op]
     (first op)))
 
-(defn split-block [simple-block [x y]]
+(defn pcut-block [simple-block [x y]]
   (let [[kind l b r t] (:shape simple-block)
         color (:color simple-block)]
     (assert (= kind :rect))
@@ -47,7 +47,25 @@
      (SimpleBlock. [kind x y r t] color)
      (SimpleBlock. [kind l y x t] color)]))
 
-(defmethod transform :pcut [block [_ id [x y]]]
+(defn xcut-block [simple-block x]
+  (let [[kind l b r t] (:shape simple-block)
+        color (:color simple-block)]
+    (assert (= kind :rect))
+    (assert (and (< x r)
+                 (< l x)))
+    [(SimpleBlock. [kind l b x t] color)
+     (SimpleBlock. [kind x b r t] color)]))
+
+(defn ycut-block [simple-block y]
+  (let [[kind l b r t] (:shape simple-block)
+        color (:color simple-block)]
+    (assert (= kind :rect))
+    (assert (and (< y t)
+                 (< b y)))
+    [(SimpleBlock. [kind l b r y] color)
+     (SimpleBlock. [kind l y r t] color)]))
+
+(defn update-by-id [block id  f]
   (let [go (fn go [block id]
              (let [[child-id & rest] id]
                (if (some? child-id)
@@ -56,20 +74,30 @@
                    (update-in block [:children child-id] (fn [child] (go child rest))))
                  (do
                    (assert (instance? SimpleBlock block) (str "Expected simple block"))
-                   (ComplexBlock. (:shape block) (split-block block [x y]))))))]
+                   (f block)))))]
     (go block id)))
 
+(defmethod transform :pcut [block [_ id [x y]]]
+  (update-by-id block id
+                (fn [block]
+                  (ComplexBlock. (:shape block) (pcut-block block [x y])))))
+
 (defmethod transform :color [block [_ id color]]
-  (let [go (fn go [block id]
-             (let [[child-id & rest] id]
-               (if (some? child-id)
-                 (do
-                   (assert (instance? ComplexBlock block) (str "Expected Complex block for id: " id))
-                   (update-in block [:children child-id] (fn [child] (go child rest))))
-                 (do
-                   (assert (instance? SimpleBlock block) (str "Expected simple block"))
-                   (assoc block :color color)))))]
-    (go block id)))
+  (update-by-id block id
+                (fn [block]
+                  (assoc block :color color))))
+
+(defmethod transform :xcut [block [_ id x]]
+  (update-by-id block id
+                (fn [block]
+                  (ComplexBlock. (:shape block)
+                                 (xcut-block block x)))))
+
+(defmethod transform :ycut [block [_ id y]]
+  (update-by-id block id
+                (fn [block]
+                  (ComplexBlock. (:shape block)
+                                 (ycut-block block y)))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -137,6 +165,12 @@
                            :pcut
                            [:pcut id [x y]]
 
+                           :xcut
+                           [:xcut id x]
+
+                           :ycut
+                           [:ycut id y]
+
                            :color
                            (let [[_ r g b a] tool]
                              [:color id [r g b a]])
@@ -185,7 +219,15 @@
         :pcut
         (let [[_ id [x y]] op]
           (format "pcut [%s] [%d, %d]" (str/join "." id) x y))
-        
+
+        :xcut
+        (let [[_ id x] op]
+          (format "lcut [%s] %d" (str/join "." id) x))
+
+        :ycut
+        (let [[_ id y] op]
+          (format "lcut [%s] %d" (str/join "." id) y))
+
         :color
         (let [[_ id [r g b a]] op]
           (format "color [%s] [%d, %d, %d, %d]" (str/join "." id) r g b a)))))
@@ -221,6 +263,14 @@
            (ui/button
              #(reset! *tool [:pcut])
              (ui/label "Point Cut"))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool [:xcut])
+             (ui/label "Point XCut"))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool [:ycut])
+             (ui/label "Point YCut"))
            (ui/gap 0 10)
            (ui/button
              #(reset! *tool [:color 255 255 255 255])
