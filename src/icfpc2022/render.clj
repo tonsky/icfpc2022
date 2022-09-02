@@ -118,8 +118,8 @@
               id   (find-leaf @*picture [] [x y])]
           (when-some [op (case (first tool)
                            :pcut
-                           [:pcut idx y]
-:color
+                           [:pcut id x y]
+                           :color
                            (let [[_ r g b a] tool]
                              [:color id r g b a])
                            
