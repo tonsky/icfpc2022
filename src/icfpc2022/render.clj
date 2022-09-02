@@ -31,6 +31,9 @@
 (def *log 
   (atom []))
 
+(def *preview
+  (atom nil))
+
 (defmulti transform ; => picture'
   (fn [picture op]
     (first op)))
@@ -185,8 +188,8 @@
                              [:color id [r g b a]])
                            
                            nil)]
-            (swap! *log conj op)
             (swap! *picture transform op)
+            (swap! *log conj op)
             true))))))
 
 (def fill-guides
@@ -207,7 +210,7 @@
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))))
 
-(defn render-to-bitmap [picture debug?]
+(defn ^Bitmap render-to-bitmap [picture debug?]
   (let [bitmap (Bitmap.)]
     (.allocN32Pixels bitmap 400 400 true)
     (let [canvas' (Canvas. bitmap)]
@@ -217,10 +220,14 @@
     bitmap))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
-  (let [{:keys [scale]} ctx]
-    (with-open [bitmap (render-to-bitmap @*picture true)
-                image (Image/makeFromBitmap bitmap)]
-        (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400))))
+  (let [{:keys [scale]} ctx
+        preview @*preview
+        picture (if preview
+                  (reduce transform start-picture (take preview @*log))
+                  @*picture)]
+    (with-open [bitmap (render-to-bitmap picture true)
+                image  (Image/makeFromBitmap bitmap)]
+      (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400))))
     (when-some [[x y] @*coord]
       (when (#{:pcut :xcut} (first @*tool))
         (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides))
@@ -272,8 +279,10 @@
         (ui/valign 0.5
           (ui/width 400
             (ui/height 400
-              (ui/canvas {:on-paint draw
-                          :on-event event}))))
+              (ui/dynamic _ [preview *preview
+                             picture *picture]
+                (ui/canvas {:on-paint draw
+                            :on-event event})))))
         (ui/gap 20 0)
         [:stretch 1
          (ui/column
@@ -329,9 +338,22 @@
               (ui/vscrollbar
                 (ui/vscroll
                   (ui/column
-                    (interpose (ui/gap 0 10)
-                      (for [op log]
-                        (ui/label op)))))))]
+                    (for [[idx op] (reverse (map vector (next (range)) log))]
+                      (ui/clickable
+                        {:on-click
+                         (fn [_]
+                           (swap! *log #(vec (take idx %)))
+                           (reset! *picture (reduce transform start-picture @*log)))}
+                        (ui/hoverable
+                          {:on-hover #(reset! *preview idx)
+                           :on-out   (fn [] (swap! *preview #(if (= idx %) nil %)))}
+                          (ui/dynamic ctx [hovered? (:hui/hovered? ctx)]
+                            (let [label (ui/padding 10 10
+                                          (ui/label (str idx ". " op)))]
+                              (if hovered?
+                                (ui/rect (paint/fill 0xFFEEEEEE)
+                                  label)
+                                label))))))))))]
            
            (ui/gap 0 10)
            (ui/button dump
