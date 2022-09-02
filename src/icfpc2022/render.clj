@@ -14,13 +14,16 @@
 
 (set! *warn-on-reflection* true)
 
-(defrecord Block [id         ;; [0 1 ...]
-                  shape      ;; [:rect l b r t]
-                  color      ;; [r g b a]
-                  children]) ;; [Block ...]
+(defrecord SimpleBlock [shape ;; [:rect l b r t]
+                        color ;; [r g b a]
+                        ])
+
+(defrecord ComplexBlock [shape    ;; [:rect l b r t]
+                         children ;; [(SimpleBlock | ComplexBlock) ...]
+                         ])
 
 (defonce *picture
-  (atom [(Block. [0] [:rect 0 0 400 400] [255 255 255 255] [])]))
+  (atom [(SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])]))
 
 (defmulti transform ; => picture'
   (fn [picture op]
