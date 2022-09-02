@@ -27,7 +27,7 @@
 
 (def start-picture
   { :counter 0
-    :blocks { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) }
+   :blocks { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) }
    })
 
 (def *log 
@@ -85,10 +85,10 @@
                       (pcut-block block [x y]))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
-            (fn [blocks]
-              (-> blocks
-                  (dissoc id)
-                  (merge (into {} new-blocks)))))))
+      (fn [blocks]
+        (-> blocks
+          (dissoc id)
+          (merge (into {} new-blocks)))))))
 
 (defmethod transform :xcut [picture [_ id x]]
   (let [block (get-in picture [:blocks id])
@@ -97,10 +97,10 @@
                       (xcut-block block x))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
-            (fn [blocks]
-              (-> blocks
-                  (dissoc id)
-                  (merge (into {} new-blocks)))))))
+      (fn [blocks]
+        (-> blocks
+          (dissoc id)
+          (merge (into {} new-blocks)))))))
 
 (defmethod transform :ycut [picture [_ id y]]
   (let [block (get-in picture [:blocks id])
@@ -109,10 +109,10 @@
                       (ycut-block block y))]
     (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
-            (fn [blocks]
-              (-> blocks
-                  (dissoc id)
-                  (merge (into {} new-blocks)))))))
+      (fn [blocks]
+        (-> blocks
+          (dissoc id)
+          (merge (into {} new-blocks)))))))
 
 (defn shape-width [shape]
   (let [[_ l b r t] shape]
@@ -169,11 +169,11 @@
     (let [picture (update picture :counter inc)
           new-block (ComplexBlock. merged-shape [block1 block2])]
       (update picture :blocks
-              (fn [blocks]
-                (-> blocks
-                    (assoc (str (:counter picture)) new-block)
-                    (dissoc id1)
-                    (dissoc id2)))))))
+        (fn [blocks]
+          (-> blocks
+            (assoc (str (:counter picture)) new-block)
+            (dissoc id1)
+            (dissoc id2)))))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -202,16 +202,16 @@
     n))
 
 (def problem
-  "3.png")
+  "3")
 
 (def snap
   (case problem
-    "1.png" 40
-    "3.png" 25
+    "1" 40
+    "3" 25
     5))
 
 (defonce ^Image original-image
-  (Image/makeFromEncoded (core/slurp-bytes (str "resources/" problem))))
+  (Image/makeFromEncoded (core/slurp-bytes (str "resources/" problem ".png"))))
 
 (defonce ^Bitmap original-bytes
   (let [bitmap     (Bitmap.)
@@ -259,7 +259,7 @@
 (defn find-block-id [picture [x y]]
   (let [[id block] (first (filter (fn [[id block]]
                                     (inside? (:shape block) [x y]))
-                                  (:blocks picture)))]
+                            (:blocks picture)))]
     id))
 
 (defn event [ctx event]
@@ -311,9 +311,9 @@
                            (let [[_ id1] tool]
                              (if (some? id1)
                                (do (swap! *tool (fn [_] [:merge]))
-                                   [:merge id1 id])
+                                 [:merge id1 id])
                                (do (swap! *tool (fn [_] [:merge id]))
-                                   nil)))
+                                 nil)))
                            nil)]
             (swap! *picture transform op)
             (swap! *log conj op)
@@ -355,18 +355,34 @@
                               (* (- b1 b2) (- b1 b2))
                               (* (- a1 a2) (- a1 a2))))))))))
 
-(defn cost [picture op]
-  (let [base  ({:xcut  7
-                :ycut  7
-                :pcut  10
-                :color 5
-                :swap  3
-                :merge 1} (first op))
-        id    (second op)
-        block (get-in picture [:blocks id])
-        [_ l b r t] (:shape block)
-        area  (* (- r l) (- t b))]
-    (math/round (/ (* base 400 400) area))))
+(defn cost
+  ([log]
+   (second
+     (reduce
+       (fn [[picture acc] op]
+         [(transform picture op)
+          (+ acc (cost picture op))])
+       [start-picture 0]
+       log)))
+  ([picture op]
+   (let [base  ({:xcut  7
+                 :ycut  7
+                 :pcut  10
+                 :color 5
+                 :swap  3
+                 :merge 1} (first op))
+         id    (second op)
+         block (get-in picture [:blocks id])
+         [_ l b r t] (:shape block)
+         area  (* (- r l) (- t b))]
+     (math/round (/ (* base 400 400) area)))))
+
+(defn score []
+  (with-open [bitmap (render-to-bitmap @*picture)]
+    (let [pixels (.readPixels bitmap)
+          sim    (similarity original-bytes pixels)
+          cost   (cost @*log)]
+      (+ cost sim))))
 
 (defn draw-picture [^Canvas canvas picture]
   (doseq [[id block] (:blocks picture)]
@@ -399,33 +415,39 @@
 
 (defn dump []
   (println "--- begin ---")
-  (doseq [op @*log]
-    (println
-      (case (first op)
-        :pcut
-        (let [[_ id [x y]] op]
-          (format "cut [%s] [%d, %d]" id x y))
+  (let [solution (str/join "\n" 
+                   (for [op @*log]
+                     (case (first op)
+                       :pcut
+                       (let [[_ id [x y]] op]
+                         (format "cut [%s] [%d, %d]" id x y))
 
-        :xcut
-        (let [[_ id x] op]
-          (format "cut [%s] [x] [%d]" id x))
+                       :xcut
+                       (let [[_ id x] op]
+                         (format "cut [%s] [x] [%d]" id x))
 
-        :ycut
-        (let [[_ id y] op]
-          (format "cut [%s] [y] [%d]" id y))
+                       :ycut
+                       (let [[_ id y] op]
+                         (format "cut [%s] [y] [%d]" id y))
 
-        :color
-        (let [[_ id [r g b a]] op]
-          (format "color [%s] [%d, %d, %d, %d]" id r g b a))
+                       :color
+                       (let [[_ id [r g b a]] op]
+                         (format "color [%s] [%d, %d, %d, %d]" id r g b a))
 
-        :swap
-        (let [[_ id1 id2] op]
-          (format "swap [%s] [%s]" id1 id2))
+                       :swap
+                       (let [[_ id1 id2] op]
+                         (format "swap [%s] [%s]" id1 id2))
 
-        :merge
-        (let [[_ id1 id2] op]
-          (format "merge [%s] [%s]" id1 id2)))))
-  (println "--- end ---"))
+                       :merge
+                       (let [[_ id1 id2] op]
+                         (format "merge [%s] [%s]" id1 id2)))))
+        score (score)
+        file  (str "answers/problem " problem " score " score ".txt")]
+    (println solution)
+    (println "--- end ---")
+    (println "Score:" score)
+    (println "File:" file)
+    (spit file solution)))
 
 (defn tool [tool label]
   (ui/dynamic _ [selected? (= tool @*tool)]
@@ -481,14 +503,9 @@
                                  (reduce transform start-picture log)
                                  @*picture)]
           (with-open [bitmap (render-to-bitmap picture)]
-            (let [pixels   (.readPixels bitmap)
-                  sim      (similarity original-bytes pixels)
-                  [_ cost] (reduce
-                             (fn [[pic acc] op]
-                               [(transform pic op)
-                                (+ acc (cost pic op))])
-                             [start-picture 0]
-                             log)]
+            (let [pixels (.readPixels bitmap)
+                  sim    (similarity original-bytes pixels)
+                  cost   (cost log)]
               (ui/column
                 (ui/width 400
                   (ui/height 400
@@ -552,7 +569,7 @@
              (ui/gap 10 0)
              [:stretch 1
               (tool [:merge]
-                    (ui/label "M"))])
+                (ui/label "M"))])
 
            (ui/gap 0 10)
            
