@@ -191,6 +191,43 @@
     (* v)
     (int)))
 
+(defn byte->long [n]
+  (assert (<= -128 n 127) (str "Expected -128..127, got: " n))
+  (-> n (+ 256) (mod 256)))
+
+(defn long->byte [^long n]
+  (assert (<= 0 n 255) (str "Expected 0..255, got: " n))
+  (if (>= n 128)
+    (- n 256)
+    n))
+
+(def problem
+  "3.png")
+
+(def snap
+  (case problem
+    "1.png" 40
+    "3.png" 25
+    5))
+
+(defonce ^Image original-image
+  (Image/makeFromEncoded (core/slurp-bytes (str "resources/" problem))))
+
+(defonce ^Bitmap original-bytes
+  (let [bitmap     (Bitmap.)
+        image-info (ImageInfo. 400 400 ColorType/RGBA_8888 ColorAlphaType/OPAQUE (ColorSpace/getSRGB))]
+    (.allocPixels bitmap image-info)
+    (.readPixels original-image bitmap)
+    (.readPixels bitmap)))
+
+(defn get-color [^bytes bytes x y]
+  (let [idx (* 4 (+ x (* 400 (- 399 y))))
+        r   (byte->long (aget bytes (+ idx 0)))
+        g   (byte->long (aget bytes (+ idx 1)))
+        b   (byte->long (aget bytes (+ idx 2)))
+        a   (byte->long (aget bytes (+ idx 3)))]
+    [r g b a]))
+
 (defn coords [ctx event]
   (let [x (int (quot (:x event) (:scale ctx)))
         y (int (- 400 (quot (:y event) (:scale ctx))))]
@@ -204,13 +241,13 @@
                           (< -420 x -20) [(+ x 420) y])]
       (case (first @*tool)
         :pcut
-        [(round-to x' 40) (round-to y' 40)]
+        [(round-to x' snap) (round-to y' snap)]
         
         :xcut 
-        [(round-to x' 40) y']
+        [(round-to x' snap) y']
         
         :ycut
-        [x' (round-to y' 40)]
+        [x' (round-to y' snap)]
         
         [x' y']))))
 
@@ -238,8 +275,9 @@
             (= :primary (:button event))
             (:pressed? event))
       (when-some [[x y] (coords ctx event)]
-        (let [tool @*tool
-              id   (find-block-id @*picture [x y])]
+        (let [tool    @*tool
+              picture @*picture
+              id      (find-block-id picture [x y])]
           (when-some [op (case (first tool)
                            :pcut
                            [:pcut id [x y]]
@@ -253,13 +291,20 @@
                            :color
                            (let [[_ r g b a] tool]
                              [:color id [r g b a]])
+                           
+                           :picker
+                           (let [[r g b a] (get-color original-bytes x y)]
+                             (reset! *tool [:color r g b a])
+                             nil)
 
                            :swap
                            (let [[_ id1] tool]
                              (if (some? id1)
-                               (do (swap! *tool (fn [_] [:swap]))
+                               (do
+                                 (reset! *tool [:swap])
                                  [:swap id1 id])
-                               (do (swap! *tool (fn [_] [:swap id]))
+                               (do
+                                 (reset! *tool [:swap id])
                                  nil)))
 
                            :merge
@@ -290,33 +335,25 @@
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))))
 
-(defn byte->long [n]
-  (assert (<= -128 n 127) (str "Expected -128..127, got: " n))
-  (-> n (+ 256) (mod 256)))
-
-(defn long->byte [^long n]
-  (assert (<= 0 n 255) (str "Expected 0..255, got: " n))
-  (if (>= n 128)
-    (- n 256)
-    n))
-
 (defn similarity [^bytes p1 ^bytes p2]
-  (loop [i   0
+  (loop [x   0
+         y   0
          res 0.0]
-    (if (>= i (alength p1))
+    (cond
+      (>= x 400)
+      (recur 0 (inc y) res)
+      
+      (>= y 400)
       (math/round (* res 0.005))
-      (let [r1 (byte->long (aget p1 (+ i 0)))
-            g1 (byte->long (aget p1 (+ i 1)))
-            b1 (byte->long (aget p1 (+ i 2)))
-            a1 (byte->long (aget p1 (+ i 3)))
-            r2 (byte->long (aget p2 (+ i 0)))
-            g2 (byte->long (aget p2 (+ i 1)))
-            b2 (byte->long (aget p2 (+ i 2)))
-            a2 (byte->long (aget p2 (+ i 3)))]
-        (recur (+ i 4) (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
-                                           (* (- g1 g2) (- g1 g2))
-                                           (* (- b1 b2) (- b1 b2))
-                                           (* (- a1 a2) (- a1 a2))))))))))
+      
+      :else
+      (let [[r1 g1 b1 a1] (get-color p1 x y)
+            [r2 g2 b2 a2] (get-color p2 x y)]
+        (recur (inc x) y
+          (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
+                              (* (- g1 g2) (- g1 g2))
+                              (* (- b1 b2) (- b1 b2))
+                              (* (- a1 a2) (- a1 a2))))))))))
 
 (defn cost [picture op]
   (let [base  ({:xcut  7
@@ -397,19 +434,6 @@
       {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
       label)))
 
-(defonce ^Image original-image
-  (Image/makeFromEncoded (core/slurp-bytes "resources/1.png")))
-
-(defonce ^Bitmap original-bitmap
-  (let [bitmap (Bitmap.)
-        image-info (ImageInfo. 400 400 ColorType/RGBA_8888 ColorAlphaType/OPAQUE (ColorSpace/getSRGB))]
-    (.allocPixels bitmap image-info)
-    (.readPixels original-image bitmap)
-    bitmap))
-
-(defonce original-bytes
-  (.readPixels original-bitmap))
-
 (core/deftype+ Stack [children ^:mut my-rect]
   protocols/IComponent
   (-measure [_ ctx cs]
@@ -460,11 +484,11 @@
             (let [pixels   (.readPixels bitmap)
                   sim      (similarity original-bytes pixels)
                   [_ cost] (reduce
-                                          (fn [[pic acc] op]
-                                            [(transform pic op)
-                                             (+ acc (cost pic op))])
-                                          [start-picture 0]
-                                          log)]
+                             (fn [[pic acc] op]
+                               [(transform pic op)
+                                (+ acc (cost pic op))])
+                             [start-picture 0]
+                             log)]
               (ui/column
                 (ui/width 400
                   (ui/height 400
@@ -504,8 +528,24 @@
              (ui/gap 10 0)
              [:stretch 1
               (tool [:ycut]
-                (ui/label "━"))]
-             (ui/gap 10 0)
+                (ui/label "━"))])
+
+           (ui/gap 0 10)
+
+           (ui/row
+             [:stretch 1
+              (ui/dynamic _ [tool @*tool]
+                (ui/button
+                  #(reset! *tool [:picker])
+                  {:bg (if (#{:picker :color} (first tool))
+                         0xFFFED7B2
+                         0xFFB2D7FE)}
+                  (if (= :color (first tool))
+                    (let [[_ r g b a] tool]
+                      (ui/rect (paint/fill (Color/makeARGB a r g b))
+                        (ui/gap 30 10)))
+                    (ui/label "🥢"))))]
+             (ui/gap 10 0)   
              [:stretch 1
               (tool [:swap]
                 (ui/label "↔︎"))]
@@ -513,24 +553,6 @@
              [:stretch 1
               (tool [:merge]
                     (ui/label "M"))])
-
-           (ui/gap 0 10)
-
-           (ui/row
-             [:stretch 1
-              (tool [:color 255 255 255 255]
-                (ui/rect (paint/fill 0xFFFFFFFF)
-                  (ui/gap 30 20)))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:color 0 0 0 255]
-                (ui/rect (paint/fill 0xFF000000)
-                  (ui/gap 30 20)))]
-             (ui/gap 10 0)
-             [:stretch 1
-              (tool [:color 0 74 173 255]
-                (ui/rect (paint/fill 0xFF004AAD)
-                  (ui/gap 30 20)))])
 
            (ui/gap 0 10)
            
