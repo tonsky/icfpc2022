@@ -185,21 +185,21 @@
             true))))))
 
 (def fill-guides
-  (paint/fill 0x80FF0000))
+  (paint/fill 0xFFFF8080))
 
 (def stroke-guides
-  (paint/stroke 0x80FF0000 2))
+  (paint/stroke 0xFFFF8080 2))
 
 (defn draw-block [^Canvas canvas block id debug?]
   (let [[_ l b r t] (:shape block)
         rect (IRect/makeLTRB l (- 400 t) r (- 400 b))]
-    (when debug?
-      (canvas/draw-rect canvas rect stroke-guides))
     (if (instance? ComplexBlock block)
       (assert false "Not implemented")
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
-          (canvas/draw-rect canvas rect fill))))))
+          (canvas/draw-rect canvas rect fill))))
+    (when debug?
+      (canvas/draw-rect canvas rect stroke-guides))))
 
 (defn draw-picture [^Canvas canvas picture debug?]
   (doseq [[id block] picture]
