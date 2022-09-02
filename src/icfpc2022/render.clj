@@ -15,9 +15,22 @@
 (set! *warn-on-reflection* true)
 
 (defrecord Block [id         ;; [0 1 ...]
-                  [l b r t]  ;; [l b r t]
+                  shape      ;; [:rect l b r t]
                   color      ;; [r g b a]
                   children]) ;; [Block ...]
+
+(defonce *picture
+  (atom [(Block. [0] [:rect 0 0 400 400] [255 255 255 255] [])]))
+
+(defmulti transform ; => picture'
+  (fn [picture op]
+    (first op)))
+
+(defmethod transform :pcut [picture [_ id x y]]
+  )
+
+(defmethod transform :color [picture [_ id r g b a]]
+  )
 
 (defonce *coord
   (atom (IPoint. 0 0)))
@@ -54,17 +67,15 @@
     (ui/padding 20
       (ui/row
         (ui/valign 0.5
-        (ui/width 400
-           (ui/height 400
-             (ui/canvas {:on-paint draw
-                         :on-event event}))))
+          (ui/width 400
+            (ui/height 400
+              (ui/image "resources/1.png"))))
         (ui/gap 20 0)
         (ui/valign 0.5
-        (ui/width 400
-           (ui/height 400
-             (ui/image "resources/1.png")
-             #_(ui/canvas {:on-paint draw
-                         :on-event event}))))
+          (ui/width 400
+            (ui/height 400
+              (ui/canvas {:on-paint draw
+                          :on-event event}))))
         (ui/gap 20 0)
         [:stretch 1
          (ui/column
@@ -75,7 +86,7 @@
              (ui/label (str "Mouse: " (:x coord) " " (:y coord))))
            (ui/gap 0 10)
            (ui/button
-             #(reset! *tool :pcut)
+             #(reset! *tool [:pcut])
              (ui/label "Point Cut"))
            (ui/gap 0 10)
            (ui/button
