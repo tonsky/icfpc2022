@@ -1,0 +1,12 @@
+{:deps
+ {org.clojure/clojure         {:mvn/version "1.11.1"}
+  io.github.humbleui/humbleui {:git/sha "23147dce62260e5fb5841e162fc604b9b4880678"
+                               #_#_:local/root  "/Users/tonsky/ws/humbleui"}
+  nrepl/nrepl                 {:mvn/version "1.0.0"}
+  com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}
+  criterium/criterium         {:mvn/version "0.4.6"}}
+ :jvm-opts ["-server"
+            "-Duser.language=en-US"
+            "-Djdk.attach.allowAttachSelf"
+            "-XX:+UnlockDiagnosticVMOptions"
+            "-XX:+DebugNonSafepoints"]}
