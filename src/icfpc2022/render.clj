@@ -14,25 +14,36 @@
 
 (set! *warn-on-reflection* true)
 
+(defrecord Block [id         ;; [0 1 ...]
+                  [l b r t]  ;; [l b r t]
+                  color      ;; [r g b a]
+                  children]) ;; [Block ...]
+
 (defonce *coord
   (atom (IPoint. 0 0)))
 
-(defonce *radius
-  (atom
-    {:value 50
-     :min   0
-     :max   100}))
+(defonce *tool
+  (atom :pcut))
 
 (defn event [ctx event]
   (when (= :mouse-move (:event event))
-    (reset! *coord (IPoint. (:x event) (:y event)))))
+    (let [x (quot (:x event) (:scale ctx))
+          y (- 400 (quot (:y event) (:scale ctx)))]
+      (cond
+        (< x 0)       (reset! *coord nil)
+        (< 400 x 420) (reset! *coord nil)
+        (< 820 x)     (reset! *coord nil)
+        (< y 0)       (reset! *coord nil)
+        (< 400 y)     (reset! *coord nil)
+        (< x 400)     (reset! *coord (IPoint. x y))
+        (< 420 x 820) (reset! *coord (IPoint. (- x 420) y))))))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
   (let [{:keys [scale]} ctx]
     (with-open [fill   (paint/fill 0xFFFFFFFF)
                 stroke (paint/stroke 0xFFCC3333 (* 2 scale))]
       (canvas/draw-rect canvas (IRect/makeXYWH 0 0 (:width size) (:height size)) fill)
-      (canvas/draw-circle canvas (:x @*coord) (:y @*coord) (:value @*radius) stroke))))
+      )))
 
 (def app
   (ui/default-theme
@@ -42,31 +53,42 @@
      :hui.text-field/padding-right  5}
     (ui/padding 20
       (ui/row
-        [:stretch 5
-         (ui/canvas {:on-paint draw
-                     :on-event event})]
+        (ui/valign 0.5
+        (ui/width 400
+           (ui/height 400
+             (ui/canvas {:on-paint draw
+                         :on-event event}))))
+        (ui/gap 20 0)
+        (ui/valign 0.5
+        (ui/width 400
+           (ui/height 400
+             (ui/image "resources/1.png")
+             #_(ui/canvas {:on-paint draw
+                         :on-event event}))))
         (ui/gap 20 0)
         [:stretch 1
          (ui/column
-           (ui/row
-             (ui/valign 0.5
-               (ui/label "Param: "))
-             (ui/gap 10 0)
-             [:stretch 1
-              (ui/text-field {:focused? true}
-                (atom {:placeholder "Type here"}))])
-           (ui/gap 0 20)
-           (ui/checkbox (atom true)
-             (ui/label "Optimal?"))
-           (ui/gap 0 20)
-           (ui/dynamic _ [value (:value @*radius)]
-             (ui/label (str "Radius: " value)))
+           (ui/dynamic _ [tool @*tool]
+             (ui/label (str "Tool: " tool)))
            (ui/gap 0 10)
-           (ui/slider *radius)
-           (ui/gap 0 20)
-           (ui/halign 0
-             (ui/button nil
-               (ui/label "Calculate"))))]))))
+           (ui/dynamic _ [coord @*coord]
+             (ui/label (str "Mouse: " (:x coord) " " (:y coord))))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool :pcut)
+             (ui/label "Point Cut"))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool [:color 255 255 255 255])
+             (ui/label "Fill White"))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool [:color 0 0 0 255])
+             (ui/label "Fill Black"))
+           (ui/gap 0 10)
+           (ui/button
+             #(reset! *tool [:color 0x0 0x4A 0xAD 255])
+             (ui/label "Fill Blue")))]))))
 
 (defn redraw []
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
