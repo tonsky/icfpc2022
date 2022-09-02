@@ -53,7 +53,7 @@
         color (:color simple-block)]
     (assert (= kind :rect))
     (assert (and (< x r)
-                 (< l x)))
+              (< l x)))
     [(SimpleBlock. [kind l b x t] color)
      (SimpleBlock. [kind x b r t] color)]))
 
@@ -62,7 +62,7 @@
         color (:color simple-block)]
     (assert (= kind :rect))
     (assert (and (< y t)
-                 (< b y)))
+              (< b y)))
     [(SimpleBlock. [kind l b r y] color)
      (SimpleBlock. [kind l y r t] color)]))
 
@@ -80,25 +80,25 @@
 
 (defmethod transform :pcut [block [_ id [x y]]]
   (update-by-id block id
-                (fn [block]
-                  (ComplexBlock. (:shape block) (pcut-block block [x y])))))
+    (fn [block]
+      (ComplexBlock. (:shape block) (pcut-block block [x y])))))
 
 (defmethod transform :color [block [_ id color]]
   (update-by-id block id
-                (fn [block]
-                  (assoc block :color color))))
+    (fn [block]
+      (assoc block :color color))))
 
 (defmethod transform :xcut [block [_ id x]]
   (update-by-id block id
-                (fn [block]
-                  (ComplexBlock. (:shape block)
-                                 (xcut-block block x)))))
+    (fn [block]
+      (ComplexBlock. (:shape block)
+        (xcut-block block x)))))
 
 (defmethod transform :ycut [block [_ id y]]
   (update-by-id block id
-                (fn [block]
-                  (ComplexBlock. (:shape block)
-                                 (ycut-block block y)))))
+    (fn [block]
+      (ComplexBlock. (:shape block)
+        (ycut-block block y)))))
 
 (def *picture
   (atom (reduce transform start-picture @*log)))
@@ -190,39 +190,37 @@
             true))))))
 
 (def fill-guides
-  (paint/fill 0x40FF0000))
+  (paint/fill 0x80FF0000))
 
 (def stroke-guides
-  (paint/stroke 0x40FF0000 2))
+  (paint/stroke 0x80FF0000 2))
 
-(defn draw-block [ctx ^Canvas canvas block id debug?]
-  (let [{:keys [scale]} ctx
-        [_ l b r t] (:shape block)
+(defn draw-block [^Canvas canvas block id debug?]
+  (let [[_ l b r t] (:shape block)
         rect (IRect/makeLTRB l (- 400 t) r (- 400 b))]
     (when debug?
       (canvas/draw-rect canvas rect stroke-guides))
     (if (instance? ComplexBlock block)
       (dotimes [i (count (:children block))]
-        (draw-block ctx canvas (nth (:children block) i) (str id "." i) debug?))
+        (draw-block canvas (nth (:children block) i) (str id "." i) debug?))
       (let [[red green blue alpha] (:color block)]
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
-          (canvas/draw-rect canvas rect fill))))
-    (when debug?
-      (canvas/draw-string canvas id
-        (+ l 10)
-        (- 400 b 10)
-        (:font-ui ctx) (:fill-text ctx)))))
+          (canvas/draw-rect canvas rect fill))))))
+
+(defn render-to-bitmap [picture debug?]
+  (let [bitmap (Bitmap.)]
+    (.allocN32Pixels bitmap 400 400 true)
+    (let [canvas' (Canvas. bitmap)]
+      (with-open [fill (paint/fill 0xFFFFFFFF)]
+        (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
+      (draw-block canvas' picture "" debug?))
+    bitmap))
 
 (defn draw [ctx ^Canvas canvas ^IPoint size]
   (let [{:keys [scale]} ctx]
-    (with-open [bitmap (Bitmap.)]
-      (.allocN32Pixels bitmap 400 400 true)
-      (let [canvas' (Canvas. bitmap)]
-        (with-open [fill (paint/fill 0xFFFFFFFF)]
-          (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
-        (draw-block ctx canvas' @*picture "" true))
-      (let [image (Image/makeFromBitmap bitmap)]
-        (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400)))))
+    (with-open [bitmap (render-to-bitmap @*picture true)
+                image (Image/makeFromBitmap bitmap)]
+        (.drawImageRect canvas image (Rect/makeXYWH 0 0 (* scale 400) (* scale 400))))
     (when-some [[x y] @*coord]
       (when (#{:pcut :xcut} (first @*tool))
         (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides))
@@ -249,18 +247,14 @@
         :color
         (let [[_ id [r g b a]] op]
           (format "color [%s] [%d, %d, %d, %d]" (str/join "." id) r g b a)))))
-  (println "--- end ---")
-  
-  (with-open [bitmap (Bitmap.)]
-    (.allocN32Pixels bitmap 400 400 true)
-    (let [canvas' (Canvas. bitmap)]
-      (with-open [fill (paint/fill 0xFFFFFFFF)]
-        (canvas/draw-rect canvas' (IRect/makeXYWH 0 0 400 400) fill))
-      (draw-block nil canvas' @*picture "" false))
-    (let [image (Image/makeFromBitmap bitmap)
-          bytes (.getBytes (.encodeToData image))]
-      (with-open [os (io/output-stream "answers/1.png")]
-        (.write os bytes)))))
+  (println "--- end ---"))
+
+(defn tool [tool label]
+  (ui/dynamic _ [selected? (= tool @*tool)]
+    (ui/button
+      #(reset! *tool tool)
+      {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
+      label)))
 
 (def app
   (ui/default-theme
@@ -283,57 +277,64 @@
         (ui/gap 20 0)
         [:stretch 1
          (ui/column
-           (ui/dynamic _ [tool @*tool]
-             (ui/label (str "Tool: " tool)))
+           (ui/row
+             [:stretch 1
+              (tool [:pcut]
+                (ui/label "╋"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:xcut]
+                (ui/label "┃"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:ycut]
+                (ui/label "━"))])
+           
            (ui/gap 0 10)
-           (ui/dynamic _ [coord @*coord]
-             (ui/label (str "Mouse: " coord)))
+           
+           (ui/row
+             [:stretch 1
+              (tool [:color 255 255 255 255]
+                (ui/rect (paint/fill 0xFFFFFFFF)
+                  (ui/gap 30 20)))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:color 0 0 0 255]
+                (ui/rect (paint/fill 0xFF000000)
+                  (ui/gap 30 20)))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (tool [:color 0x0 0x4A 0xAD 255]
+                (ui/rect (paint/fill 0xFF004AAD)
+                  (ui/gap 30 20)))])
+                                 
            (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:pcut])
-             (ui/label "Point Cut"))
-           (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:xcut])
-             (ui/label "Point XCut"))
-           (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:ycut])
-             (ui/label "Point YCut"))
-           (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:color 255 255 255 255])
-             (ui/label "Fill White"))
-           (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:color 0 0 0 255])
-             (ui/label "Fill Black"))
-           (ui/gap 0 10)
-           (ui/button
-             #(reset! *tool [:color 0x0 0x4A 0xAD 255])
-             (ui/label "Fill Blue"))
-           (ui/gap 0 10)
+           
            (ui/button
              #(do
                 (reset! *log [])
                 (reset! *picture start-picture))
              (ui/label "RESET"))
 
-           (ui/gap 0 20)
+           (ui/gap 0 10)
+           (ui/dynamic _ [coord @*coord]
+             (ui/label (str "Mouse: " coord)))
+
+           (ui/gap 0 10)
            (ui/label "Log:")
            (ui/gap 0 10)
+           
            [:stretch 1
-            (ui/vscrollbar
-              (ui/vscroll
-                (ui/padding 0 10
-                  (ui/dynamic _ [log @*log]
-                    (ui/column
-                      (interpose (ui/gap 0 10)
-                        (for [op log]
-                          (ui/label op))))))))]
+            (ui/dynamic _ [log @*log]
+              (ui/vscrollbar
+                (ui/vscroll
+                  (ui/column
+                    (interpose (ui/gap 0 10)
+                      (for [op log]
+                        (ui/label op)))))))]
+           
            (ui/gap 0 10)
-           (ui/button
-             dump
+           (ui/button dump
              (ui/label "Dump")))]))))
 
 (defn redraw []
