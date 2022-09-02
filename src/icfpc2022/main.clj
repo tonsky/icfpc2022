@@ -42,7 +42,7 @@
         x       (+ (:x area) (/ (- (:width area) width) 2))
         y       (+ (:y area) (/ (- (:height area) height) 2))
         window  (window/make
-                  {:on-close #(reset! *window nil)
+                  {:on-close #(System/exit 0)
                    :on-paint #'on-paint
                    :on-event #'on-event})]
     ; (window/set-z-order window :floating)

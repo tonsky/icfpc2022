@@ -85,13 +85,13 @@
       (< 0 x 400)   [x y]
       (< -420 x -20) [(+ x 420) y])))
 
-(defn contains? [[_ l b r t] [x y]]
+(defn inside? [[_ l b r t] [x y]]
   (and
     (<= l x r)
     (<= b y t)))
 
 (defn find-leaf [block id [x y]]
-  (when (contains? (:shape block) [x y])
+  (when (inside? (:shape block) [x y])
     (if (instance? ComplexBlock block)
       (reduce
         (fn [i child]
