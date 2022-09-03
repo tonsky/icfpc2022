@@ -26,11 +26,11 @@
                          ])
 
 (def start-picture
-  { :counter 0
-   :blocks { "0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255]) }
+  {:counter 0
+   :blocks  {"0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])}
    })
 
-(def *log 
+(def *log
   (atom []))
 
 (def *guides?
@@ -39,40 +39,73 @@
 (def *preview
   (atom nil))
 
-(defmulti transform ; => picture'
-  (fn [picture op]
-    (first op)))
+(defmulti transform                                         ; => picture'
+          (fn [picture op]
+            (first op)))
 
-(defn pcut-block [simple-block [x y]]
-  (let [[kind l b r t] (:shape simple-block)
-        color (:color simple-block)]
+(defn pcut-shape [shape [x y]]
+  (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< x r)
-              (< l x)
-              (< y t)
-              (< b y)))
-    [(SimpleBlock. [kind l b x y] color)
-     (SimpleBlock. [kind x b r y] color)
-     (SimpleBlock. [kind x y r t] color)
-     (SimpleBlock. [kind l y x t] color)]))
+                 (< l x)
+                 (< y t)
+                 (< b y)))
+    [[kind l b x y]
+     [kind x b r y]
+     [kind x y r t]
+     [kind l y x t]]))
 
-(defn xcut-block [simple-block x]
-  (let [[kind l b r t] (:shape simple-block)
-        color (:color simple-block)]
+(defn xcut-shape [shape x]
+  (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< x r)
-              (< l x)))
-    [(SimpleBlock. [kind l b x t] color)
-     (SimpleBlock. [kind x b r t] color)]))
+                 (< l x)))
+    [[kind l b x t]
+     [kind x b r t]]))
 
-(defn ycut-block [simple-block y]
-  (let [[kind l b r t] (:shape simple-block)
-        color (:color simple-block)]
+(defn ycut-shape [shape y]
+  (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< y t)
-              (< b y)))
-    [(SimpleBlock. [kind l b r y] color)
-     (SimpleBlock. [kind l y r t] color)]))
+                 (< b y)))
+    [[kind l b r y]
+     [kind l y r t]]))
+
+(defn intersect-shapes [[kind1 l1 b1 r1 t1] [kind2 l2 b2 r2 t2]]
+   (assert (and (= kind1 :rect) (= kind2 :rect)))
+   (if (or (<= r1 l2) (<= r2 l1) (<= t1 b2) (<= t2 b1))
+     nil
+     [:rect (max l1 l2) (max b1 b2) (min r1 r2) (min t1 t2)]))
+
+(defn cut-block [block shape-cut-fn]
+  (let [shapes (shape-cut-fn (:shape block))]
+    (cond
+      (instance? SimpleBlock block)
+      (mapv (fn [shape]
+              (SimpleBlock. shape (:color block)))
+            shapes)
+
+      (instance? ComplexBlock block)
+      (let [children (:children block)]
+        (mapv (fn [shape]
+                (let [filtered-children (keep (fn [child]
+                                                (let [new-child-shape (intersect-shapes (:shape child) shape)]
+                                                  (when (some? new-child-shape)
+                                                    (SimpleBlock. new-child-shape (:color child)))))
+                                              children)]
+                  (ComplexBlock. shape filtered-children)))
+              shapes))
+
+      :else (assert false (str "Unexpected block type" block)))))
+
+(defn pcut-block [block [x y]]
+  (cut-block block (fn [shape] (pcut-shape shape [x y]))))
+
+(defn xcut-block [block x]
+  (cut-block block (fn [shape] (xcut-shape shape x))))
+
+(defn ycut-block [block y]
+  (cut-block block (fn [shape] (ycut-shape shape y))))
 
 (defmethod transform :color [picture [_ id color]]
   (assert (contains? (:blocks picture) id) (str ":color No block " id))
@@ -85,7 +118,6 @@
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (pcut-block block [x y]))]
-    (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
       (fn [blocks]
         (-> blocks
@@ -98,7 +130,6 @@
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (xcut-block block x))]
-    (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
       (fn [blocks]
         (-> blocks
@@ -111,7 +142,6 @@
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
                       (ycut-block block y))]
-    (assert (instance? SimpleBlock block) "Cut Complex block")
     (update picture :blocks
       (fn [blocks]
         (-> blocks
@@ -219,7 +249,7 @@
     n))
 
 (def problem
-  "4")
+  "3")
 
 (def snap
   (case problem
