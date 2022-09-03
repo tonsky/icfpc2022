@@ -46,13 +46,18 @@
                    :on-paint #'on-paint
                    :on-event #'on-event})]
     ; (window/set-z-order window :floating)
-    ; (reset! debug/*enabled? true)
+    (reset! debug/*enabled? true)
     (window/set-title window "ICFPC 2022 × Humble UI 🐝")
     (when (= :macos app/platform)
       (window/set-icon window "resources/icon.icns"))
     (window/set-window-size window width height)
     (window/set-window-position window x y)
     (window/set-visible window true)))
+
+(Thread/setDefaultUncaughtExceptionHandler
+  (reify Thread$UncaughtExceptionHandler
+    (uncaughtException [_ thread ex]
+      (.printStackTrace ^Throwable ex))))
 
 (defn -main [& args]
   (future (apply nrepl/-main args))

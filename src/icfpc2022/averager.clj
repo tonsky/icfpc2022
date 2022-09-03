@@ -15,37 +15,17 @@
     {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
      :multipart [{:name "file" :content (io/file solution)}]}))
 
-(defn average [colors]
-  (let [[r g b a] (reduce
-                    (fn [[r g b a] [r' g' b' a']]
-                      [(+ r r') (+ g g') (+ b b') (+ a a')])
-                    [0 0 0 0] colors)]
-    [(int (/ r (count colors)))
-     (int (/ g (count colors)))
-     (int (/ b (count colors)))
-     (int (/ a (count colors)))]))
-
-(defn most-common [colors]
-  (first
-    (reduce-kv
-      (fn [[col cnt] col' cnt']
-        (if (> cnt' cnt)
-          [col' cnt']
-          [col cnt]))
-      [[0 0 0 0] -1]
-      (frequencies colors))))
-
 (defn algo-average [^bytes bytes]
   (let [colors (for [x (range 0 400)
                      y (range 0 400)]
                  (render/get-color bytes x y))]
-    [[:color "0" (average colors)]]))
+    [[:color "0" (render/average colors)]]))
 
 (defn algo-common [^bytes bytes]
   (let [colors (for [x (range 0 400)
                      y (range 0 400)]
                  (render/get-color bytes x y))]
-    [[:color "0" (most-common colors)]]))
+    [[:color "0" (render/most-common colors)]]))
 
 (defn split [id l b r t]
   (if (> (- r l) 25)
@@ -83,22 +63,13 @@
                            colors (for [x (range l r)
                                         y (range b t)]
                                     (render/get-color bytes x y))]]
-                 [:color id (average colors)])]
+                 [:color id (render/average colors)])]
     (concat
       log
       colors)))
 
 (defn min-by [k & args]
   (apply min-key k (filter #(some? (k %)) args)))
-
-(defmacro get-cached [*cache key & body]
-  `(let [*cache# ~*cache
-         key#    ~key]
-     (or
-       (@*cache# key#)
-       (let [val# (do ~@body)]
-         (vswap! *cache# assoc key# val#)
-         val#))))
 
 (defn algo-divide
   ([^bytes bytes]
@@ -108,9 +79,9 @@
      (println score)
      ops))
   ([^bytes bytes id [shape l b r t] color colored? *cache]
-   (get-cached *cache [:all id [shape l b r t] color]
+   (render/get-cached *cache [:all id [shape l b r t] color]
      (apply println [:all id [shape l b r t] color])
-     (let [colors (get-cached *cache [:colors [shape l b r t]]
+     (let [colors (render/get-cached *cache [:colors [shape l b r t]]
                     (vec
                       (for [x (range l r)
                             y (range b t)]
@@ -119,14 +90,14 @@
          {:ops   []
           :score (render/similarity bytes (constantly color) [l b r t])}
          (when-not colored?
-           (let [color' (get-cached *cache [:average [shape l b r t]]
-                          (average colors))
+           (let [color' (render/get-cached *cache [:average [shape l b r t]]
+                          (render/average colors))
                  {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
              {:ops   (cons [:color id color'] ops)
               :score (+ (render/op-cost :color [shape l b r t]) score)}))
          (when-not colored?
-           (let [color' (get-cached *cache [:common [shape l b r t]]
-                          (most-common colors))
+           (let [color' (render/get-cached *cache [:common [shape l b r t]]
+                          (render/most-common colors))
                  {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
              {:ops   (cons [:color id color'] ops)
               :score (+ (render/op-cost :color [shape l b r t]) score)}))
@@ -191,16 +162,24 @@
 (comment
   (-main)
   
-  (submit 5 "answers/problem 5/42760")
-  (submit 6 "answers/problem 6/95781")
-  (submit 7 "answers/problem 7/95990")
+  (submit 2 "answers/problem 2/9695")
+  (submit 5 "answers/problem 5/28950")
+  (submit 6 "answers/problem 6/17506")
+  (submit 7 "answers/problem 7/53951")
   (submit 8 "answers/problem 8/21911")
-  (submit 10 "answers/problem 10/72254")
+  (submit 9 "answers/problem 9/31638")
+  (submit 10 "answers/problem 10/53728")
+  (submit 11 "answers/problem 11/72706")
   (submit 12 "answers/problem 12/24775")
+  (submit 13 "answers/problem 13/28462")
   (submit 14 "answers/problem 14/45204")
   (submit 15 "answers/problem 15/62157")
+  (submit 16 "answers/problem 16/32828")
+  (submit 17 "answers/problem 17/45519")
   (submit 19 "answers/problem 19/75547")
-  (submit 20 "answers/problem 20/75784")
+  (submit 20 "answers/problem 20/28682")
+  (submit 21 "answers/problem 21/47395")
   (submit 22 "answers/problem 22/54943")
-  (submit 23 "answers/problem 23/93958")
-  (submit 24 "answers/problem 24/46778"))
+  (submit 23 "answers/problem 23/37399")
+  (submit 24 "answers/problem 24/30480")
+  (submit 25 "answers/problem 25/43120"))

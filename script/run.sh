@@ -2,4 +2,4 @@
 set -o errexit -o nounset -o pipefail
 cd "$(dirname "$0")/.."
 
-clj -M -m icfpc2022.main $@
+clj -J-Djdk.attach.allowAttachSelf -J-XX:+UnlockDiagnosticVMOptions -J-XX:+DebugNonSafepoints -M -m icfpc2022.main $@

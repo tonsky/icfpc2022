@@ -5,7 +5,7 @@
   clj-http/clj-http           {:mvn/version "3.12.3"}
   ; org.suskalo/coffi           {:mvn/version "0.5.357"}
   nrepl/nrepl                 {:mvn/version "1.0.0"}
-  ; com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}
+  com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}
   ; criterium/criterium         {:mvn/version "0.4.6"}
   }
  :jvm-opts ["-server"
@@ -13,7 +13,7 @@
             "-ea"
             ; "--add-modules=jdk.incubator.foreign"
             ; "--enable-native-access=ALL-UNNAMED"
-            ; "-Djdk.attach.allowAttachSelf"
-            ; "-XX:+UnlockDiagnosticVMOptions"
-            ; "-XX:+DebugNonSafepoints"
+            "-Djdk.attach.allowAttachSelf"
+            "-XX:+UnlockDiagnosticVMOptions"
+            "-XX:+DebugNonSafepoints"
             ]}

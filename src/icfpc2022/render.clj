@@ -1,5 +1,6 @@
 (ns icfpc2022.render
   (:require
+    [clj-async-profiler.core :as profiler]
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
@@ -16,6 +17,10 @@
     [io.github.humbleui.types IPoint IRect Rect]))
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* true)
+
+(defn redraw []
+  (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (defrecord SimpleBlock [shape ;; [:rect l b r t]
                         color ;; [r g b a]
@@ -30,7 +35,7 @@
    :blocks  {"0" (SimpleBlock. [:rect 0 0 400 400] [255 255 255 255])}
    })
 
-(def *log
+(defonce *log
   (atom []))
 
 (def *guides?
@@ -40,16 +45,16 @@
   (atom nil))
 
 (defmulti transform                                         ; => picture'
-          (fn [picture op]
-            (first op)))
+  (fn [picture op]
+    (first op)))
 
 (defn pcut-shape [shape [x y]]
   (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< x r)
-                 (< l x)
-                 (< y t)
-                 (< b y)))
+              (< l x)
+              (< y t)
+              (< b y)))
     [[kind l b x y]
      [kind x b r y]
      [kind x y r t]
@@ -59,7 +64,7 @@
   (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< x r)
-                 (< l x)))
+              (< l x)))
     [[kind l b x t]
      [kind x b r t]]))
 
@@ -67,15 +72,15 @@
   (let [[kind l b r t] shape]
     (assert (= kind :rect))
     (assert (and (< y t)
-                 (< b y)))
+              (< b y)))
     [[kind l b r y]
      [kind l y r t]]))
 
 (defn intersect-shapes [[kind1 l1 b1 r1 t1] [kind2 l2 b2 r2 t2]]
-   (assert (and (= kind1 :rect) (= kind2 :rect)))
-   (if (or (<= r1 l2) (<= r2 l1) (<= t1 b2) (<= t2 b1))
-     nil
-     [:rect (max l1 l2) (max b1 b2) (min r1 r2) (min t1 t2)]))
+  (assert (and (= kind1 :rect) (= kind2 :rect)))
+  (if (or (<= r1 l2) (<= r2 l1) (<= t1 b2) (<= t2 b1))
+    nil
+    [:rect (max l1 l2) (max b1 b2) (min r1 r2) (min t1 t2)]))
 
 (defn cut-block [block shape-cut-fn]
   (let [shapes (shape-cut-fn (:shape block))]
@@ -83,7 +88,7 @@
       (instance? SimpleBlock block)
       (mapv (fn [shape]
               (SimpleBlock. shape (:color block)))
-            shapes)
+        shapes)
 
       (instance? ComplexBlock block)
       (let [children (:children block)]
@@ -92,9 +97,9 @@
                                                 (let [new-child-shape (intersect-shapes (:shape child) shape)]
                                                   (when (some? new-child-shape)
                                                     (SimpleBlock. new-child-shape (:color child)))))
-                                              children)]
+                                          children)]
                   (ComplexBlock. shape filtered-children)))
-              shapes))
+          shapes))
 
       :else (assert false (str "Unexpected block type" block)))))
 
@@ -238,9 +243,9 @@
     (* v)
     (int)))
 
-(defn byte->long [n]
-  (assert (<= -128 n 127) (str "Expected -128..127, got: " n))
-  (-> n (+ 256) (mod 256)))
+(defmacro byte->long [n]
+  #_(assert (<= -128 n 127) (str "Expected -128..127, got: " n))
+  `(-> ~n (+ 256) (mod 256)))
 
 (defn long->byte [^long n]
   (assert (<= 0 n 255) (str "Expected 0..255, got: " n))
@@ -249,7 +254,7 @@
     n))
 
 (def problem
-  "3")
+  "2")
 
 (def snap
   (case problem
@@ -272,7 +277,7 @@
         r   (byte->long (aget bytes (+ idx 0)))
         g   (byte->long (aget bytes (+ idx 1)))
         b   (byte->long (aget bytes (+ idx 2)))
-        a   (byte->long (aget bytes (+ idx 3)))]
+        a   255 #_(byte->long (aget bytes (+ idx 3)))]
     [r g b a]))
 
 (defn coords [ctx event]
@@ -300,8 +305,10 @@
 
 (defn inside? [[_ l b r t] [x y]]
   (and
-    (<= l x r)
-    (<= b y t)))
+    (<= l x)
+    (< x r)
+    (<= b y)
+    (< y t)))
 
 (defn find-block-id [picture [x y]]
   (let [[id block] (first (filter (fn [[id block]]
@@ -384,26 +391,32 @@
 
 (defn similarity
   ([^bytes p1 ^bytes p2]
-   (similarity p1 #(get-color p2 %1 %2) [0 0 400 400]))
-  ([^bytes p1 get-color2 [l b r t]]
-   (loop [x   0
-          y   0
-          res 0.0]
-     (cond
-       (>= x 400)
-       (recur 0 (inc y) res)
-        
-       (>= y 400)
-       (math/round (* res 0.005))
-        
-       :else
-       (let [[r1 g1 b1 a1] (get-color p1 x y)
-             [r2 g2 b2 a2] (get-color2 x y)]
-         (recur (inc x) y
-           (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
-                               (* (- g1 g2) (- g1 g2))
-                               (* (- b1 b2) (- b1 b2))
-                               (* (- a1 a2) (- a1 a2)))))))))))
+   (similarity p1 p2 Long/MAX_VALUE))
+  ([^bytes p1 ^bytes p2 limit]
+   (similarity p1 #(get-color p2 %1 %2) [0 0 400 400] limit))
+  ([^bytes p1 get-color2 [l b r t] limit]
+   (let [limit' (/ limit 0.005)] 
+     (loop [x   0
+            y   0
+            res 0.0]
+       (cond
+         (> res limit')
+         (math/round (* res 0.005))
+       
+         (>= y 400)
+         (math/round (* res 0.005))
+       
+         (>= x 400)
+         (recur 0 (inc y) res)
+ 
+         :else
+         (let [[r1 g1 b1 a1] (get-color p1 x y)
+               [r2 g2 b2 a2] (get-color2 x y)]
+           (recur (inc x) y
+             (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
+                                 (* (- g1 g2) (- g1 g2))
+                                 (* (- b1 b2) (- b1 b2))
+                                 #_(* (- a1 a2) (- a1 a2))))))))))))
 
 (defn op-cost [type [shape l b r t]]
   (let [base  ({:xcut  7
@@ -446,12 +459,23 @@
 
 (defn score
   ([]
-   (score @*log original-bytes))
-  ([log original-bytes]
-   (let [picture (reduce transform start-picture log)]
+   (score @*log original-bytes Long/MAX_VALUE))
+  ([log original-bytes limit]
+   (let [picture   (reduce transform start-picture log)]
+     #_(let [get-color (fn [x y]
+                         (reduce-kv
+                           (fn [color id block]
+                             (if (inside? (:shape block) [x y])
+                               (reduced (:color block))
+                               color))
+                           [255 255 255 255]
+                           (:blocks picture)))
+             sim  (similarity original-bytes get-color [0 0 400 400] limit)
+             cost (cost log)]
+         (+ cost sim))
      (with-open [bitmap (render-to-bitmap picture)]
        (let [pixels (.readPixels bitmap)
-             sim    (similarity original-bytes pixels)
+             sim    (similarity original-bytes pixels limit)
              cost   (cost log)]
          (+ cost sim))))))
 
@@ -544,6 +568,127 @@
 (defn stack [& children]
   (->Stack children nil))
 
+(defonce *slider
+  (atom
+    {:value 128
+     :min 0
+     :max 255}))
+
+(add-watch *slider ::tool
+  (fn [_ _ old new]
+    (when (not= (:value old) (:value new))
+      (reset! *tool [:color (:value new) (:value new) (:value new) 255]))))
+
+(defmacro get-cached [*cache key & body]
+  `(let [*cache# ~*cache
+         key#    ~key]
+     (or
+       (@*cache# key#)
+       (let [val# (do ~@body)]
+         (vswap! *cache# assoc key# val#)
+         val#))))
+
+(defonce *progress
+  (atom "Ready"))
+
+(defn try-logs! [logs]
+  (future
+    (try
+      (profiler/profile
+        (reset! *progress 0)
+        (let [t0          (System/currentTimeMillis)
+              *best-log   (volatile! nil)
+              *best-score (volatile! Long/MAX_VALUE)]
+          (doseq [log logs]
+            (let [picture (reduce transform start-picture log)
+                  score   (score log original-bytes @*best-score)]
+              (when (< score @*best-score)
+                (vreset! *best-log log)
+                (vreset! *best-score score)
+                (reset! *log log)
+                (reset! *picture picture))
+              (swap! *progress inc)
+              (redraw)))
+          (reset! *progress (format "Done in %d ms" (- (System/currentTimeMillis) t0)))))
+      (catch Throwable t
+        (reset! *progress (.getMessage t))
+        (.printStackTrace t)))))
+
+(defn average [colors]
+  (let [[r g b a] (reduce
+                    (fn [[r g b a] [r' g' b' a']]
+                      [(+ r r') (+ g g') (+ b b') (+ a a')])
+                    [0 0 0 0] colors)]
+    [(int (/ r (count colors)))
+     (int (/ g (count colors)))
+     (int (/ b (count colors)))
+     (int (/ a (count colors)))]))
+
+(defn most-common [colors]
+  (->> (frequencies colors)
+    (sort-by second)
+    (reverse)
+    (map first)
+    (take 1)))
+
+(defonce *original-cache
+  (volatile! {}))
+
+(defn algo-hsplit-2 []
+  (let [step 50]
+    (for [y1 (range step        (- 400 (* 3 step)) step)
+          y2 (range (+ y1 step) (- 400 (* 2 step)) step)
+          y3 (range (+ y2 step) (- 400 (* 1 step)) step)
+          ; y4 (range (+ y3 step) (- 400 (* 0 step)) step)
+          :let [y4      400
+                colors1 (get-cached *original-cache [:colors 0 0 400 y1]
+                          (vec
+                            (for [x (range 0 400)
+                                  y (range 0 y1)]
+                              (get-color original-bytes x y))))
+                colors2 (get-cached *original-cache [:colors 0 y1 400 y2]
+                          (vec
+                            (for [x (range 0 400)
+                                  y (range y1 y2)]
+                              (get-color original-bytes x y))))
+                colors3 (get-cached *original-cache [:colors 0 y2 400 y3]
+                          (vec
+                            (for [x (range 0 400)
+                                  y (range y2 y3)]
+                              (get-color original-bytes x y))))
+                colors4 (get-cached *original-cache [:colors 0 y3 400 y4]
+                          (vec
+                            (for [x (range 0 400)
+                                  y (range y3 y4)]
+                              (get-color original-bytes x y))))]
+          color1 (concat
+                   (get-cached *original-cache [:most-common 0 0 400 y1]
+                     (most-common colors1))
+                   [(get-cached *original-cache [:average 0 0 400 y1]
+                      (average colors1))])
+          color2 (concat
+                   (get-cached *original-cache [:most-common 0 y1 400 y2]
+                     (most-common colors2))
+                   [(get-cached *original-cache [:average 0 y1 400 y2]
+                      (average colors2))])
+          color3 (concat
+                   (get-cached *original-cache [:most-common 0 y2 400 y3]
+                     (most-common colors3))
+                   [(get-cached *original-cache [:average 0 y2 400 y3]
+                      (average colors3))])
+          color4 (concat
+                   (get-cached *original-cache [:most-common 0 y3 400 y4]
+                     (most-common colors4))
+                   [(get-cached *original-cache [:average 0 y3 400 y4]
+                      (average colors4))])]
+      [[:color "0"         color1]
+       [:ycut  "0"         y1]
+       [:color "0.1"       color2]
+       [:ycut  "0.1"       y2]    
+       [:color "0.1.1"     color3]
+       [:ycut  "0.1.1"     y3]
+       [:color "0.1.1.1"   color4]])))
+
 (def app
   (ui/default-theme
     {:hui.text-field/padding-top    10
@@ -631,7 +776,19 @@
              [:stretch 1
               (tool [:merge]
                 (ui/label "M"))])
+           
+           (ui/gap 0 10)
+           (ui/slider *slider)
+           
+           (ui/gap 0 10)
+           (ui/button
+             #(try-logs! (algo-hsplit-2))
+             (ui/label "algo-hsplit-2"))
 
+           (ui/gap 0 10)
+           (ui/dynamic _ [progress @*progress]
+             (ui/label (str "Progress: " progress)))
+           
            (ui/gap 0 10)
            
            (ui/checkbox
@@ -682,7 +839,5 @@
            (ui/button dump
              (ui/label "Dump")))]))))
 
-(defn redraw []
-  (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (redraw)
