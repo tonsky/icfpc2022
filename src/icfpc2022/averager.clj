@@ -15,18 +15,6 @@
     {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
      :multipart [{:name "file" :content (io/file solution)}]}))
 
-(defn split [id l b r t]
-  (if (> (- r l) 25)
-    (let [x (/ (+ l r) 2)
-          y (/ (+ t b) 2)]
-      (concat
-        [[:pcut id [x y]]]
-        (split (str id ".0") l b x y)
-        (split (str id ".1") x b r y)
-        (split (str id ".2") x y r t)
-        (split (str id ".3") l y x t)))
-    []))
-
 (defn average [colors]
   (let [[r g b a] (reduce
                     (fn [[r g b a] [r' g' b' a']]
@@ -59,6 +47,18 @@
                  (render/get-color bytes x y))]
     [[:color "0" (most-common colors)]]))
 
+(defn split [id l b r t]
+  (if (> (- r l) 25)
+    (let [x (/ (+ l r) 2)
+          y (/ (+ t b) 2)]
+      (concat
+        [[:pcut id [x y]]]
+        (split (str id ".0") l b x y)
+        (split (str id ".1") x b r y)
+        (split (str id ".2") x y r t)
+        (split (str id ".3") l y x t)))
+    []))
+
 (defn algo-grid [^bytes bytes]
   (let [log (split "0" 0 0 400 400)
         fx  {0 0 1 1 2 1 3 0}
@@ -88,6 +88,71 @@
       log
       colors)))
 
+(defn min-by [k & args]
+  (apply min-key k (filter #(some? (k %)) args)))
+
+(defmacro get-cached [*cache key & body]
+  `(let [*cache# ~*cache
+         key#    ~key]
+     (or
+       (@*cache# key#)
+       (let [val# (do ~@body)]
+         (vswap! *cache# assoc key# val#)
+         val#))))
+
+(defn algo-divide
+  ([^bytes bytes]
+   (let [*cache (volatile! {})
+         {:keys [ops score]} (algo-divide bytes "0" [:rect 0 0 400 400] [255 255 255 255] false *cache)]
+     (println (str/join "\n" ops))
+     (println score)
+     ops))
+  ([^bytes bytes id [shape l b r t] color colored? *cache]
+   (get-cached *cache [:all id [shape l b r t] color]
+     (apply println [:all id [shape l b r t] color])
+     (let [colors (get-cached *cache [:colors [shape l b r t]]
+                    (vec
+                      (for [x (range l r)
+                            y (range b t)]
+                        (render/get-color bytes x y))))]
+       (min-by :score
+         {:ops   []
+          :score (render/similarity bytes (constantly color) [l b r t])}
+         (when-not colored?
+           (let [color' (get-cached *cache [:average [shape l b r t]]
+                          (average colors))
+                 {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
+             {:ops   (cons [:color id color'] ops)
+              :score (+ (render/op-cost :color [shape l b r t]) score)}))
+         (when-not colored?
+           (let [color' (get-cached *cache [:common [shape l b r t]]
+                          (most-common colors))
+                 {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
+             {:ops   (cons [:color id color'] ops)
+              :score (+ (render/op-cost :color [shape l b r t]) score)}))
+         (when (>= (- r l) 100)
+           (let [x     (quot (+ r l) 2)
+                 left  (algo-divide bytes (str id ".0") [shape l b x t] color false *cache)
+                 right (algo-divide bytes (str id ".1") [shape x b r t] color false *cache)]
+             {:ops   (concat
+                       [[:xcut id x]]
+                       (:ops left)
+                       (:ops right))
+              :score (+ (render/op-cost :xcut [shape l b r t])
+                       (:score left)
+                       (:score right))}))
+         (when (>= (- t b) 100)
+           (let [y      (quot (+ t b) 2)
+                 bottom (algo-divide bytes (str id ".0") [shape l b r y] color false *cache)
+                 top    (algo-divide bytes (str id ".1") [shape l y r t] color false *cache)]
+             {:ops   (concat
+                       [[:ycut id y]]
+                       (:ops bottom)
+                       (:ops top))
+              :score (+ (render/op-cost :ycut [shape l b r t])
+                       (:score bottom)
+                       (:score top))})))))))
+
 (comment
   (algo-grid nil))
 
@@ -95,27 +160,33 @@
   (doseq [problem (->> (file-seq (io/file "resources"))
                     (keep #(second (re-matches #"(\d+)\.png" (.getName %))))
                     (map parse-long)
-                    sort)]
+                    sort
+                    (drop 10)
+                    (take 1))]
     (with-open [image  (Image/makeFromEncoded (core/slurp-bytes (str "resources/" problem ".png")))
                 bitmap (Bitmap.)]
       (let [image-info  (ImageInfo. 400 400 ColorType/RGBA_8888 ColorAlphaType/OPAQUE (ColorSpace/getSRGB))
             _           (.allocPixels bitmap image-info)
             _           (.readPixels image bitmap)
             bytes       (.readPixels bitmap)
-            algos       [algo-average
-                         algo-common
-                         algo-grid]
-            results     (map #(let [log (% bytes)] [log (render/score log bytes)]) algos)
-            [log score] (apply min-key second results)
-            solutions   (->> (file-seq (io/file (str "answers/problem " problem)))
-                          (keep #(parse-long (.getName %))))]
-        (println "Problem" problem "before:" solutions "now:" (map second results))
-        (when (or (empty? solutions)
-                (< score (reduce min solutions)))
-          (println "  writing answers/problem " problem "/" score)
-          (.mkdirs (io/file (str "answers/problem " problem)))
-          (spit (io/file (str "answers/problem " problem "/" score))
-            (render/solution log)))))))
+            algos       [#_algo-average
+                         #_algo-common
+                         #_algo-grid
+                         algo-divide]
+            results     (keep #(when-some [log (not-empty (% bytes))]
+                                 [log (render/score log bytes)])
+                          algos)]
+        (when (not-empty results)
+          (let [[log score] (apply min-key second results)
+                solutions   (->> (file-seq (io/file (str "answers/problem " problem)))
+                              (keep #(parse-long (.getName %))))]
+            (println "Problem" problem "before:" solutions "now:" (map second results))
+            (when (or (empty? solutions)
+                    (< score (reduce min solutions)))
+              (println "  writing answers/problem " problem "/" score)
+              (.mkdirs (io/file (str "answers/problem " problem)))
+              (spit (io/file (str "answers/problem " problem "/" score))
+                (render/solution log)))))))))
 
 (comment
   (-main)

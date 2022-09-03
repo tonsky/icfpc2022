@@ -214,7 +214,7 @@
     (assert (some? merged-shape) "Blocks should be the same shape")
     (let [picture (update picture :counter inc)
           new-block (ComplexBlock. merged-shape (into (list-simple-blocks block1)
-                                                      (list-simple-blocks block2)))]
+                                                  (list-simple-blocks block2)))]
       (update picture :blocks
         (fn [blocks]
           (-> blocks
@@ -382,25 +382,38 @@
         (with-open [fill (paint/fill (Color/makeARGB alpha red green blue))]
           (canvas/draw-rect canvas rect fill))))))
 
-(defn similarity [^bytes p1 ^bytes p2]
-  (loop [x   0
-         y   0
-         res 0.0]
-    (cond
-      (>= x 400)
-      (recur 0 (inc y) res)
-      
-      (>= y 400)
-      (math/round (* res 0.005))
-      
-      :else
-      (let [[r1 g1 b1 a1] (get-color p1 x y)
-            [r2 g2 b2 a2] (get-color p2 x y)]
-        (recur (inc x) y
-          (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
-                              (* (- g1 g2) (- g1 g2))
-                              (* (- b1 b2) (- b1 b2))
-                              (* (- a1 a2) (- a1 a2))))))))))
+(defn similarity
+  ([^bytes p1 ^bytes p2]
+   (similarity p1 #(get-color p2 %1 %2) [0 0 400 400]))
+  ([^bytes p1 get-color2 [l b r t]]
+   (loop [x   0
+          y   0
+          res 0.0]
+     (cond
+       (>= x 400)
+       (recur 0 (inc y) res)
+        
+       (>= y 400)
+       (math/round (* res 0.005))
+        
+       :else
+       (let [[r1 g1 b1 a1] (get-color p1 x y)
+             [r2 g2 b2 a2] (get-color2 x y)]
+         (recur (inc x) y
+           (+ res (math/sqrt (+ (* (- r1 r2) (- r1 r2))
+                               (* (- g1 g2) (- g1 g2))
+                               (* (- b1 b2) (- b1 b2))
+                               (* (- a1 a2) (- a1 a2)))))))))))
+
+(defn op-cost [type [shape l b r t]]
+  (let [base  ({:xcut  7
+                :ycut  7
+                :pcut  10
+                :color 5
+                :swap  3
+                :merge 1} type)
+        area  (* (- r l) (- t b))]
+    (math/round (/ (* base 400 400) area))))
 
 (defn cost
   ([log]
@@ -412,17 +425,10 @@
        [start-picture 0]
        log)))
   ([picture op]
-   (let [base  ({:xcut  7
-                 :ycut  7
-                 :pcut  10
-                 :color 5
-                 :swap  3
-                 :merge 1} (first op))
-         id    (second op)
+   (let [id    (second op)
          block (get-in picture [:blocks id])
-         [_ l b r t] (:shape block)
-         area  (* (- r l) (- t b))]
-     (math/round (/ (* base 400 400) area)))))
+         [shape l b r t] (:shape block)]
+     (op-cost (first op) [shape l b r t]))))
 
 (defn draw-picture [^Canvas canvas picture]
   (doseq [[id block] (:blocks picture)]
