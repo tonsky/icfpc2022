@@ -1,10 +1,12 @@
 (ns icfpc2022.render
   (:require
     [clj-async-profiler.core :as profiler]
+    [clj-http.client :as http]
     [clojure.data.priority-map :refer [priority-map]]
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
+    [icfpc2022.runner :as runner]
     [io.github.humbleui.app :as app]
     [io.github.humbleui.canvas :as canvas]
     [io.github.humbleui.core :as core]
@@ -255,7 +257,7 @@
     n))
 
 (def problem
-  "18")
+  "19")
 
 (def snap
   (case problem
@@ -533,7 +535,8 @@
     (println "Score:" score)
     (println "File:" file)
     (.mkdirs (io/file (str "answers/problem " problem)))
-    (spit file solution)))
+    (spit file solution)
+    file))
 
 (defn tool [tool label]
   (ui/dynamic _ [selected? (= tool @*tool)]
@@ -580,31 +583,84 @@
     (when (not= (:value old) (:value new))
       (reset! *tool [:color (:value new) (:value new) (:value new) 255]))))
 
-(defonce *progress
+(defonce *status
   (atom "Ready"))
 
 (defn try-logs! [logs]
   (future
     (try
-      (profiler/profile
-        (reset! *progress 0)
-        (let [t0          (System/currentTimeMillis)
-              *best-log   (volatile! nil)
-              *best-score (volatile! Long/MAX_VALUE)]
-          (doseq [log logs]
-            (let [picture (reduce transform start-picture log)
-                  score   (score log original-bytes @*best-score)]
-              (when (< score @*best-score)
-                (vreset! *best-log log)
-                (vreset! *best-score score)
-                (reset! *log log)
-                (reset! *picture picture))
-              (swap! *progress inc)
-              (redraw)))
-          (reset! *progress (format "Done in %d ms" (- (System/currentTimeMillis) t0)))))
+      (reset! *status 0)
+      (let [t0          (System/currentTimeMillis)
+            *best-log   (volatile! nil)
+            *best-score (volatile! Long/MAX_VALUE)]
+        (doseq [log logs]
+          (let [picture (reduce transform start-picture log)
+                score   (score log original-bytes @*best-score)]
+            (when (< score @*best-score)
+              (vreset! *best-log log)
+              (vreset! *best-score score)
+              (reset! *log log)
+              (reset! *picture picture))
+            (swap! *status inc)
+            (redraw)))
+        (reset! *status (format "Done in %,.d ms" (/ (- (System/currentTimeMillis) t0) 1000.0))))
       (catch Throwable t
-        (reset! *progress (.getMessage t))
+        (reset! *status (.getMessage t))
         (.printStackTrace t)))))
+
+(defn parse-command [cmd]
+  (condp re-matches cmd
+    #"cut \[([0-9.]+)\] \[(\d+), (\d+)\]"
+    :>> (fn [[_ id x y]]
+          [:pcut id (parse-long x) (parse-long y)])
+    
+    #"cut \[([0-9.]+)\] \[[xX]\] \[(\d+)\]"
+    :>> (fn [[_ id x]]
+          [:xcut id (parse-long x)])
+    
+    #"cut \[([0-9.]+)\] \[[yY]\] \[(\d+)\]"
+    :>> (fn [[_ id y]]
+          [:ycut id (parse-long y)])
+    
+    #"color \[([0-9.]+)\] \[(\d+), (\d+), (\d+), (\d+)\]"
+    :>> (fn [[_ id r g b a]]
+          [:color id [(parse-long r) (parse-long g) (parse-long b) (parse-long a)]])
+    
+    #"swap \[([0-9.]+)\] \[([0-9.]+)\]"
+    :>> (fn [[_ id1 id2]]
+          [:swap id1 id2])
+    
+    #"merge \[([0-9.]+)\] \[([0-9.]+)\]"
+    :>> (fn [[_ id1 id2]]
+          [:swap id1 id2])))
+
+(defn try-rust! [problem algo & args]
+  (future
+    (try
+      (reset! *status "Thinking in Rust...")
+      (let [t0 (System/currentTimeMillis)]
+        (runner/run!
+          {:on-output
+           (fn [line]
+             (let [[score & log] (str/split line #"\|")
+                   log     (mapv parse-command log)
+                   picture (reduce transform start-picture log)]
+               (reset! *log log)
+               (reset! *picture picture)
+               (reset! *status (format "%,.1f ms: Found %s" (/ (- (System/currentTimeMillis) t0) 1000.0) score))
+               (redraw)))}
+          (concat ["cargo" "-q" "run" "--release" problem] args))
+        (reset! *status (format "Done in %,.1f ms" (/ (- (System/currentTimeMillis) t0) 1000.0)))
+        (redraw))
+      (catch Throwable t
+        (reset! *status (.getMessage t))
+        (.printStackTrace t)))))  
+
+(defn submit [problem solution]
+  (let [resp (http/post (str "https://robovinci.xyz/api/submissions/" problem "/create")
+               {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
+                :multipart [{:name "file" :content (io/file solution)}]})]
+    (reset! *status (format "Sent! %d %s" (:status resp) (:body resp)))))
 
 (defn average [colors]
   (let [[r g b a] (reduce
@@ -700,7 +756,7 @@
        [:pcut "0" [l b]]
        [:pcut "0.2" [r t]]
        [:color "0.2.0" color-in]])))
-
+  
 (def app
   (ui/default-theme
     {:hui.text-field/padding-top    10
@@ -801,30 +857,48 @@
              [:stretch 1
               (ui/button #(try-logs! (algo-rect))
                 (ui/label "algo-rect"))])
-
-           (ui/gap 0 10)
-           (ui/dynamic _ [progress @*progress]
-             (ui/label (str "Progress: " progress)))
            
            (ui/gap 0 10)
-           
-           (ui/checkbox
-             *guides?
-             (ui/label "Guides"))
-           
-           (ui/gap 0 10)
-
-           (ui/button
-             #(do
-                (reset! *log [])
-                (reset! *picture start-picture))
-             (ui/label "RESET"))
+           (ui/row
+             [:stretch 1
+              (ui/button #(try-rust! problem "vsplit")
+                (ui/label "brute vsplit"))])
 
            (ui/gap 0 10)
-           (ui/dynamic _ [coord @*coord]
-             (ui/label (str "Mouse: " coord)))
 
-           (ui/gap 0 20)
+           (ui/halign 0
+             (ui/row
+               (ui/button
+                 #(submit problem (dump))
+                 {:bg 0xFFB2FEB2}
+                 (ui/label "Submit"))
+               (ui/gap 10 0)
+               (ui/button dump
+                 (ui/label "Dump"))
+               (ui/gap 10 0)
+               (ui/button
+                 #(do
+                    (reset! *log [])
+                    (reset! *picture start-picture))
+                 {:bg 0xFFFEB2B2}
+                 (ui/label "Reset"))))
+
+           (ui/gap 0 15)
+           (ui/dynamic _ [status @*status]
+             (ui/label (str "Status: " status)))
+           
+           (ui/gap 0 15)
+           (ui/row
+             (ui/checkbox
+               *guides?
+               (ui/label "Guides"))
+             (ui/gap 15 0)
+             (ui/valign 0.5
+               (ui/dynamic _ [coord @*coord]
+                 (ui/label (str "Mouse: " coord))))
+             [:stretch 1 nil])
+
+           (ui/gap 0 15)
            (ui/label "Log:")
            (ui/gap 0 10)
 
@@ -850,11 +924,7 @@
                                 (if hovered?
                                   (ui/rect (paint/fill 0xFFEEEEEE)
                                     label)
-                                  label)))))))))))]
-
-           (ui/gap 0 10)
-           (ui/button dump
-             (ui/label "Dump")))]))))
+                                  label)))))))))))])]))))
 
 
 (redraw)

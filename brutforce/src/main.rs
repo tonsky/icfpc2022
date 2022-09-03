@@ -2,6 +2,7 @@
 #![allow(irrefutable_let_patterns)]
 extern crate core;
 
+use std::env;
 use std::collections::HashMap;
 use image::io::Reader as ImageReader;
 use image::{Rgba, RgbaImage};
@@ -246,7 +247,7 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Operation {
     Color {
         id: BlockId,
@@ -271,6 +272,31 @@ enum Operation {
     Merge {
         id1: BlockId,
         id2: BlockId
+    }
+}
+
+impl Operation {
+    pub fn serialize(&self) -> String {
+        match self {
+            Operation::Color { id, color } => {
+                format!("color [{}] [{}, {}, {}, {}]", id, color.r, color.g, color.b, color.a)
+            }
+            Operation::PCut { id, point } => {
+                format!("cut [{}] [{}, {}]", id, point.x, point.y)
+            }
+            Operation::XCut { id, x } => {
+                format!("cut [{}] [X] [{}]", id, x)
+            }
+            Operation::YCut { id, y } => {
+                format!("cut [{}] [Y] [{}]", id, y)
+            }
+            Operation::Swap { id1, id2 } => {
+                format!("swap [{}] [{}]", id1, id2)
+            }
+            Operation::Merge { id1, id2 } => {
+                format!("merge [{}] [{}]", id1, id2)
+            }
+        }
     }
 }
 
@@ -502,7 +528,29 @@ impl Problem {
         Ok(Color { r, g, b, a })
     }
 
-    fn similarity(self, picture: &Picture) -> Result<u64, String> {
+    fn average_color(&self, left: Coord, bottom: Coord, right: Coord, top: Coord) -> Color {
+        let mut r: i32 = 0;
+        let mut g: i32 = 0;
+        let mut b: i32 = 0;
+        let count = (right - left) * (top - bottom);
+        for x in left..right {
+            for y in bottom..top {
+                let p = Point { x: x as Coord, y: y as Coord };
+                let c = self.get_color(p).unwrap();
+                r += c.r as i32;
+                g += c.g as i32;
+                b += c.b as i32;
+            }
+        }
+        return Color {
+            r: (r / count) as u8,
+            g: (g / count) as u8,
+            b: (b / count) as u8,
+            a: 255
+        };
+    }
+
+    fn similarity(&self, picture: &Picture) -> Result<u64, String> {
         let mut result = 0f64;
         for x in 0..self.image.width() {
             for y in 0..self.image.height() {
@@ -514,35 +562,61 @@ impl Problem {
     }
 }
 
-fn score(_log: &Log) -> Score {
-    return 0;
-}
-
-fn try_logs(logs: Vec<Log>) -> Result<(), Error> {
-    let mut best_log = None;
+fn try_logs(logs: Vec<Log>, problem: &Problem) {
+    // let mut best_log = None;
     let mut best_score = None;
     for log in &logs {
-        let score = score(log);
-        if best_score.is_none() || score <= best_score.unwrap() {
-            best_log = Some(log);
+        let mut picture = Picture::initial();
+        let mut cost = 0;
+        log.iter().for_each(|op| {
+            cost += picture.cost(op.clone()).unwrap();
+            picture.apply(op.clone()).unwrap();
+        });
+        let similarity = problem.similarity(&picture).unwrap();
+        let score = similarity + cost;
+
+        if best_score.is_none() || score < best_score.unwrap() {
+            // best_log = Some(log);
             best_score = Some(score);
+            // println!("{:?} {:?}", score, log);
+            let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
+            println!("{}|{}", score, strs.join("|"))
         }
     }
-    println!("{:?}", best_log.unwrap());
-    return Ok(())
+    // println!("{:?}", best_log.unwrap());
 }
 
-fn algo_vsplit() -> Vec<Log> {
-    let step = 25;
-    return (0..400).step_by(step).flat_map(|x1|
-        (x1..400).step_by(step).map(move |x2|
-            vec![Operation::XCut { id: "0".to_string(), x: x1 as i32 },
-                 Operation::XCut { id: "0.1".to_string(), x: x2 as i32 }]
-            )
-    ).collect();
+fn algo_vsplit(problem: &Problem) -> Vec<Log> {
+    let step = 20;
+    return (step..(400 - 3 * step)).step_by(step).flat_map(|x1| {
+        ((x1+step)..(400 - 2 * step)).step_by(step).flat_map(move |x2| {
+            ((x2+step)..(400 - 1 * step)).step_by(step).flat_map(move |x3| {
+                ((x3+step)..(400 - 0 * step)).step_by(step).map(move |x4| {
+                    let c1 = problem.average_color(0, 0, x1 as i32, 400);
+                    let c2 = problem.average_color(x1 as i32, 0, x2 as i32, 400);
+                    let c3 = problem.average_color(x2 as i32, 0, x3 as i32, 400);
+                    let c4 = problem.average_color(x3 as i32, 0, x4 as i32, 400);
+                    let c5 = problem.average_color(x4 as i32, 0, 400, 400);
+
+                    return vec![Operation::Color { id: "0".to_string(), color: c1 },
+                                Operation::XCut { id: "0".to_string(), x: x1 as i32 },
+                                Operation::Color { id: "0.1".to_string(), color: c2 },
+                                Operation::XCut { id: "0.1".to_string(), x: x2 as i32 },
+                                Operation::Color { id: "0.1.1".to_string(), color: c3 },
+                                Operation::XCut { id: "0.1.1".to_string(), x: x3 as i32 },
+                                Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
+                                Operation::XCut { id: "0.1.1.1".to_string(), x: x4 as i32 },
+                                Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }];
+                })
+            })
+        })
+    }).collect();
 }
 
 fn main() {
-    Problem::load(7).unwrap();
-    println!("Hello, world!");
+    let args: Vec<String> = env::args().collect();
+    let num: i32 = args[1].parse().expect("Wanted a number");
+
+    let problem = Problem::load(num).unwrap();
+    try_logs(algo_vsplit(&problem), &problem);
 }

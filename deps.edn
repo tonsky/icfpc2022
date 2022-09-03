@@ -9,12 +9,14 @@
   com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}
   ; criterium/criterium         {:mvn/version "0.4.6"}
   }
- :jvm-opts ["-server"
-            "-Duser.language=en-US"
-            "-ea"
-            ; "--add-modules=jdk.incubator.foreign"
-            ; "--enable-native-access=ALL-UNNAMED"
-            "-Djdk.attach.allowAttachSelf"
-            "-XX:+UnlockDiagnosticVMOptions"
-            "-XX:+DebugNonSafepoints"
-            ]}
+ :aliases
+ {:opts
+  {:jvm-opts ["-server"
+              "-Duser.language=en-US"
+              "-ea"
+              ; "--add-modules=jdk.incubator.foreign"
+              ; "--enable-native-access=ALL-UNNAMED"
+              "-Djdk.attach.allowAttachSelf"
+              "-XX:+UnlockDiagnosticVMOptions"
+              "-XX:+DebugNonSafepoints"
+              ]}}}

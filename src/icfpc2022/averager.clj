@@ -10,11 +10,6 @@
     [io.github.humbleui.skija Bitmap Canvas Color ColorAlphaType ColorSpace ColorType Image ImageInfo]
     [io.github.humbleui.types IPoint IRect Rect]))
 
-(defn submit [problem solution]
-  (http/post (str "https://robovinci.xyz/api/submissions/" problem "/create")
-    {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
-     :multipart [{:name "file" :content (io/file solution)}]}))
-
 (defn algo-average [^bytes bytes]
   (let [colors (for [x (range 0 400)
                      y (range 0 400)]
@@ -177,7 +172,7 @@
   (submit 16 "answers/problem 16/32828")
   (submit 17 "answers/problem 17/45519")
   (submit 18 "answers/problem 18/48404")
-  (submit 19 "answers/problem 19/75547")
+  (submit 19 "answers/problem 19/53530")
   (submit 20 "answers/problem 20/28682")
   (submit 21 "answers/problem 21/47395")
   (submit 22 "answers/problem 22/54943")
