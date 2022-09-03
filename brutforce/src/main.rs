@@ -3,6 +3,8 @@
 extern crate core;
 
 use std::collections::HashMap;
+use image::io::Reader as ImageReader;
+use image::{Rgba, RgbaImage};
 
 type BlockId = String;
 type Coord = i32;
@@ -194,6 +196,16 @@ impl Color {
         b: 0,
         a: 255
     };
+
+    fn distance(&self, other: &Color) -> f64 {
+        let Color { r: r1, g: g1, b: b1, a: _a1 } = *self;
+        let Color { r: r2, g: g2, b: b2, a: _a2 } = *other;
+        let dr = r1 as f64 - r2 as f64;
+        let dg = g1 as f64 - g2 as f64;
+        let db = b1 as f64 - b2 as f64;
+        // alpha ignored
+        return (dr * dr + dg * dg + db * db).sqrt();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -411,8 +423,38 @@ impl Picture {
     }
 }
 
+struct Problem {
+    image: RgbaImage
+}
 
+impl Problem {
+    fn load(problem_id: i32) -> Result<Problem, Error> {
+        let reader = ImageReader::open(format!("../resources/{}.png", problem_id)).map_err(|err| err.to_string())?;
+        let img = reader.decode().map_err(|err| err.to_string())?;
+        assert!(img.height() == 400 && img.width() == 400);
+        Ok(Problem {
+            image: img.to_rgba8()
+        })
+    }
+
+    fn get_color(&self, point: Point) -> Result<Color, Error> {
+        let &Rgba([r, g, b, a]) =  self.image.get_pixel(point.x as u32, self.image.height() - point.y as u32 - 1);
+        Ok(Color { r, g, b, a })
+    }
+
+    fn similarity(self, picture: &Picture) -> Result<u64, String> {
+        let mut result = 0f64;
+        for x in 0..self.image.width() {
+            for y in 0..self.image.height() {
+                let p = Point { x: x as Coord, y: y as Coord };
+                result += self.get_color(p)?.distance(&picture.get_color(p)?);
+            }
+        }
+        Ok((result * 0.005).round() as u64)
+    }
+}
 
 fn main() {
+    Problem::load(7).unwrap();
     println!("Hello, world!");
 }
