@@ -75,10 +75,12 @@
      (SimpleBlock. [kind l y r t] color)]))
 
 (defmethod transform :color [picture [_ id color]]
+  (assert (contains? (:blocks picture) id) (str ":color No block " id))
   (update-in picture [:blocks id] (fn [block]
                                     (SimpleBlock. (:shape block) color))))
 
 (defmethod transform :pcut [picture [_ id [x y]]]
+  (assert (contains? (:blocks picture) id) (str ":pcut No block " id))
   (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
@@ -91,6 +93,7 @@
           (merge (into {} new-blocks)))))))
 
 (defmethod transform :xcut [picture [_ id x]]
+  (assert (contains? (:blocks picture) id) (str ":xcut No block " id))
   (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
@@ -103,6 +106,7 @@
           (merge (into {} new-blocks)))))))
 
 (defmethod transform :ycut [picture [_ id y]]
+  (assert (contains? (:blocks picture) id) (str ":ycut No block " id))
   (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
                                    [(str id "." ind) block])
@@ -132,6 +136,8 @@
         shape1 (:shape block1)
         block2 (get-in picture [:blocks id2])
         shape2 (:shape block2)]
+    (assert (contains? (:blocks picture) id1) (str ":swap No block " id1))
+    (assert (contains? (:blocks picture) id2) (str ":swap No block " id2))
     (assert (same-shape? shape1 shape2) "Blocks should be the same shape")
     (-> picture
       (assoc-in [:blocks id1 :shape] shape2)

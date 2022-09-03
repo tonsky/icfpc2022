@@ -67,7 +67,7 @@
                      l2 (range 4)
                      l3 (range 4)
                      l4 (range 4)
-                     :let [id (str/join "." [l1 l2 l3 l4])
+                     :let [id (str/join "." ["0" l1 l2 l3 l4])
                            l  (+ 
                                 (* (fx l1) 200)
                                 (* (fx l2) 100)
@@ -109,17 +109,17 @@
             [log score] (apply min-key second results)
             solutions   (->> (file-seq (io/file (str "answers/problem " problem)))
                           (keep #(parse-long (.getName %))))]
-        (println "Before:" solutions "now:" (map second results))
+        (println "Problem" problem "before:" solutions "now:" (map second results))
         (when (or (empty? solutions)
                 (< score (reduce min solutions)))
-          (println problem "->" score)
+          (println "  writing answers/problem " problem "/" score)
           (.mkdirs (io/file (str "answers/problem " problem)))
           (spit (io/file (str "answers/problem " problem "/" score))
             (render/solution log)))))))
 
-; 4 -> 25313
 (comment
   (-main)
+  
   (submit 5 "answers/problem 5/42760")
   (submit 6 "answers/problem 6/95781")
   (submit 7 "answers/problem 7/95990")
