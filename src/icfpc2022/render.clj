@@ -1,6 +1,7 @@
 (ns icfpc2022.render
   (:require
     [clj-async-profiler.core :as profiler]
+    [clojure.data.priority-map :refer [priority-map]]
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
@@ -254,7 +255,7 @@
     n))
 
 (def problem
-  "2")
+  "18")
 
 (def snap
   (case problem
@@ -579,15 +580,6 @@
     (when (not= (:value old) (:value new))
       (reset! *tool [:color (:value new) (:value new) (:value new) 255]))))
 
-(defmacro get-cached [*cache key & body]
-  `(let [*cache# ~*cache
-         key#    ~key]
-     (or
-       (@*cache# key#)
-       (let [val# (do ~@body)]
-         (vswap! *cache# assoc key# val#)
-         val#))))
-
 (defonce *progress
   (atom "Ready"))
 
@@ -625,62 +617,59 @@
      (int (/ a (count colors)))]))
 
 (defn most-common [colors]
-  (->> (frequencies colors)
-    (sort-by second)
-    (reverse)
-    (map first)
-    (take 1)))
+  (ffirst
+    (rseq
+      (reduce
+        (fn [m c]
+          (update m c (fnil inc 0)))
+        (priority-map) colors))))
+
+(defn color-variants [colors]
+  [#_(average colors)
+   (most-common colors)])
 
 (defonce *original-cache
   (volatile! {}))
 
-(defn algo-hsplit-2 []
+(defmacro cached [key & body]
+  `(let [key# ~key]
+     (or
+       #_(@*original-cache key#)
+       (let [val# (do ~@body)]
+         #_(vswap! *original-cache assoc key# val#)
+         val#))))
+
+(defn algo-hsplit []
   (let [step 50]
     (for [y1 (range step        (- 400 (* 3 step)) step)
           y2 (range (+ y1 step) (- 400 (* 2 step)) step)
           y3 (range (+ y2 step) (- 400 (* 1 step)) step)
           ; y4 (range (+ y3 step) (- 400 (* 0 step)) step)
           :let [y4      400
-                colors1 (get-cached *original-cache [:colors 0 0 400 y1]
-                          (vec
-                            (for [x (range 0 400)
-                                  y (range 0 y1)]
-                              (get-color original-bytes x y))))
-                colors2 (get-cached *original-cache [:colors 0 y1 400 y2]
-                          (vec
-                            (for [x (range 0 400)
-                                  y (range y1 y2)]
-                              (get-color original-bytes x y))))
-                colors3 (get-cached *original-cache [:colors 0 y2 400 y3]
-                          (vec
-                            (for [x (range 0 400)
-                                  y (range y2 y3)]
-                              (get-color original-bytes x y))))
-                colors4 (get-cached *original-cache [:colors 0 y3 400 y4]
-                          (vec
-                            (for [x (range 0 400)
-                                  y (range y3 y4)]
-                              (get-color original-bytes x y))))]
-          color1 (concat
-                   (get-cached *original-cache [:most-common 0 0 400 y1]
-                     (most-common colors1))
-                   [(get-cached *original-cache [:average 0 0 400 y1]
-                      (average colors1))])
-          color2 (concat
-                   (get-cached *original-cache [:most-common 0 y1 400 y2]
-                     (most-common colors2))
-                   [(get-cached *original-cache [:average 0 y1 400 y2]
-                      (average colors2))])
-          color3 (concat
-                   (get-cached *original-cache [:most-common 0 y2 400 y3]
-                     (most-common colors3))
-                   [(get-cached *original-cache [:average 0 y2 400 y3]
-                      (average colors3))])
-          color4 (concat
-                   (get-cached *original-cache [:most-common 0 y3 400 y4]
-                     (most-common colors4))
-                   [(get-cached *original-cache [:average 0 y3 400 y4]
-                      (average colors4))])]
+                colors1 (cached [:hsplit/colors 0 0 400 y1]
+                          (for [x (range 0 400)
+                                y (range 0 y1)]
+                            (get-color original-bytes x y)))
+                colors2 (cached [:hsplit/colors 0 y1 400 y2]
+                          (for [x (range 0 400)
+                                y (range y1 y2)]
+                            (get-color original-bytes x y)))
+                colors3 (cached [:hsplit/colors 0 y2 400 y3]
+                          (for [x (range 0 400)
+                                y (range y2 y3)]
+                            (get-color original-bytes x y)))
+                colors4 (cached [:hsplit/colors 0 y3 400 y4]
+                          (for [x (range 0 400)
+                                y (range y3 y4)]
+                            (get-color original-bytes x y)))]
+          color1 (cached [:hsplit/color-variants 0 0 400 y1]
+                   (color-variants colors1))
+          color2 (cached [:hsplit/color-variants 0 y1 400 y2]
+                   (color-variants colors2))
+          color3 (cached [:hsplit/color-variants 0 y2 400 y3]
+                   (color-variants colors3))
+          color4 (cached [:hsplit/color-variants 0 y3 400 y4]
+                   (color-variants colors4))]
       [[:color "0"         color1]
        [:ycut  "0"         y1]
        [:color "0.1"       color2]
@@ -688,6 +677,29 @@
        [:color "0.1.1"     color3]
        [:ycut  "0.1.1"     y3]
        [:color "0.1.1.1"   color4]])))
+
+(defn algo-rect []
+  (let [step 50]
+    (for [l (range step (- 400 step) step)
+          r (range (+ l step) 400 step)
+          b (range step (- 400 step) step)
+          t (range (+ b step) 400 step)
+          :let [colors-in  (cached [:rect/colors-in l b r t]
+                             (for [x (range l r 5)
+                                   y (range b t 5)]
+                               (get-color original-bytes x y)))
+                colors-out (cached [:rect/colors-out l b r t]
+                             (for [x (concat (range 0 l 5) (range r 400 5))
+                                   y (concat (range 0 b 5) (range t 400 5))]
+                               (get-color original-bytes x y)))]
+          color-in  (cached [:hsplit/color-variants-in l b r t]
+                      (color-variants colors-in))
+          color-out (cached [:hsplit/color-variants-out l b r t]
+                      (color-variants colors-out))]
+      [[:color "0" color-out]
+       [:pcut "0" [l b]]
+       [:pcut "0.2" [r t]]
+       [:color "0.2.0" color-in]])))
 
 (def app
   (ui/default-theme
@@ -781,9 +793,14 @@
            (ui/slider *slider)
            
            (ui/gap 0 10)
-           (ui/button
-             #(try-logs! (algo-hsplit-2))
-             (ui/label "algo-hsplit-2"))
+           (ui/row
+             [:stretch 1
+              (ui/button #(try-logs! (algo-hsplit))
+                (ui/label "algo-hsplit"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (ui/button #(try-logs! (algo-rect))
+                (ui/label "algo-rect"))])
 
            (ui/gap 0 10)
            (ui/dynamic _ [progress @*progress]

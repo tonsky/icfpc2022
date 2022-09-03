@@ -79,9 +79,9 @@
      (println score)
      ops))
   ([^bytes bytes id [shape l b r t] color colored? *cache]
-   (render/get-cached *cache [:all id [shape l b r t] color]
+   (render/cached [:all id [shape l b r t] color]
      (apply println [:all id [shape l b r t] color])
-     (let [colors (render/get-cached *cache [:colors [shape l b r t]]
+     (let [colors (render/cached [:colors [shape l b r t]]
                     (vec
                       (for [x (range l r)
                             y (range b t)]
@@ -90,13 +90,13 @@
          {:ops   []
           :score (render/similarity bytes (constantly color) [l b r t])}
          (when-not colored?
-           (let [color' (render/get-cached *cache [:average [shape l b r t]]
+           (let [color' (render/cached [:average [shape l b r t]]
                           (render/average colors))
                  {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
              {:ops   (cons [:color id color'] ops)
               :score (+ (render/op-cost :color [shape l b r t]) score)}))
          (when-not colored?
-           (let [color' (render/get-cached *cache [:common [shape l b r t]]
+           (let [color' (render/cached [:common [shape l b r t]]
                           (render/most-common colors))
                  {:keys [ops score]} (algo-divide bytes id [shape l b r t] color' true *cache)]
              {:ops   (cons [:color id color'] ops)
@@ -176,6 +176,7 @@
   (submit 15 "answers/problem 15/62157")
   (submit 16 "answers/problem 16/32828")
   (submit 17 "answers/problem 17/45519")
+  (submit 18 "answers/problem 18/48404")
   (submit 19 "answers/problem 19/75547")
   (submit 20 "answers/problem 20/28682")
   (submit 21 "answers/problem 21/47395")

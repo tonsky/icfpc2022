@@ -9,6 +9,7 @@ use image::{Rgba, RgbaImage};
 type BlockId = String;
 type Coord = i32;
 type Error = String;
+type Score = i32;
 
 #[derive(Debug, Copy, Clone)]
 enum Shape {
@@ -273,6 +274,8 @@ enum Operation {
     }
 }
 
+type Log = Vec<Operation>;
+
 #[derive(Debug)]
 pub struct Picture {
     counter: u32,
@@ -509,6 +512,34 @@ impl Problem {
         }
         Ok((result * 0.005).round() as u64)
     }
+}
+
+fn score(_log: &Log) -> Score {
+    return 0;
+}
+
+fn try_logs(logs: Vec<Log>) -> Result<(), Error> {
+    let mut best_log = None;
+    let mut best_score = None;
+    for log in &logs {
+        let score = score(log);
+        if best_score.is_none() || score <= best_score.unwrap() {
+            best_log = Some(log);
+            best_score = Some(score);
+        }
+    }
+    println!("{:?}", best_log.unwrap());
+    return Ok(())
+}
+
+fn algo_vsplit() -> Vec<Log> {
+    let step = 25;
+    return (0..400).step_by(step).flat_map(|x1|
+        (x1..400).step_by(step).map(move |x2|
+            vec![Operation::XCut { id: "0".to_string(), x: x1 as i32 },
+                 Operation::XCut { id: "0.1".to_string(), x: x2 as i32 }]
+            )
+    ).collect();
 }
 
 fn main() {
