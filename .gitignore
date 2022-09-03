@@ -2,3 +2,4 @@ answers/*.png
 .cpcache
 .nrepl-port
 api_token
+.idea
