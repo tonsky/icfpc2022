@@ -2,6 +2,7 @@
  {org.clojure/clojure         {:mvn/version "1.11.1"}
   io.github.humbleui/humbleui {:git/sha "23147dce62260e5fb5841e162fc604b9b4880678"
                                #_#_:local/root  "/Users/tonsky/ws/humbleui"}
+  clj-http                    {:mvn/version "3.12.3"}
   ; org.suskalo/coffi           {:mvn/version "0.5.357"}
   nrepl/nrepl                 {:mvn/version "1.0.0"}
   ; com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.0"}

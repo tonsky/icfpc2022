@@ -213,7 +213,7 @@
     n))
 
 (def problem
-  "2")
+  "4")
 
 (def snap
   (case problem
@@ -402,12 +402,16 @@
       (draw-picture canvas' picture))
     bitmap))
 
-(defn score []
-  (with-open [bitmap (render-to-bitmap @*picture)]
-    (let [pixels (.readPixels bitmap)
-          sim    (similarity original-bytes pixels)
-          cost   (cost @*log)]
-      (+ cost sim))))
+(defn score
+  ([]
+   (score @*log original-bytes))
+  ([log original-bytes]
+   (let [picture (reduce transform start-picture log)]
+     (with-open [bitmap (render-to-bitmap picture)]
+       (let [pixels (.readPixels bitmap)
+             sim    (similarity original-bytes pixels)
+             cost   (cost log)]
+         (+ cost sim))))))
 
 (defn draw-guides [ctx ^Canvas canvas picture]
   (let [{:keys [scale]} ctx]
@@ -424,40 +428,44 @@
       (when (#{:pcut :ycut} (first @*tool))
         (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides)))))
 
+(defn solution [log]
+  (str/join "\n" 
+    (for [op log]
+      (case (first op)
+        :pcut
+        (let [[_ id [x y]] op]
+          (format "cut [%s] [%d, %d]" id x y))
+
+        :xcut
+        (let [[_ id x] op]
+          (format "cut [%s] [x] [%d]" id x))
+
+        :ycut
+        (let [[_ id y] op]
+          (format "cut [%s] [y] [%d]" id y))
+
+        :color
+        (let [[_ id [r g b a]] op]
+          (format "color [%s] [%d, %d, %d, %d]" id r g b a))
+
+        :swap
+        (let [[_ id1 id2] op]
+          (format "swap [%s] [%s]" id1 id2))
+
+        :merge
+        (let [[_ id1 id2] op]
+          (format "merge [%s] [%s]" id1 id2))))))
+
 (defn dump []
   (println "--- begin ---")
-  (let [solution (str/join "\n" 
-                   (for [op @*log]
-                     (case (first op)
-                       :pcut
-                       (let [[_ id [x y]] op]
-                         (format "cut [%s] [%d, %d]" id x y))
-
-                       :xcut
-                       (let [[_ id x] op]
-                         (format "cut [%s] [x] [%d]" id x))
-
-                       :ycut
-                       (let [[_ id y] op]
-                         (format "cut [%s] [y] [%d]" id y))
-
-                       :color
-                       (let [[_ id [r g b a]] op]
-                         (format "color [%s] [%d, %d, %d, %d]" id r g b a))
-
-                       :swap
-                       (let [[_ id1 id2] op]
-                         (format "swap [%s] [%s]" id1 id2))
-
-                       :merge
-                       (let [[_ id1 id2] op]
-                         (format "merge [%s] [%s]" id1 id2)))))
-        score (score)
-        file  (str "answers/problem " problem " score " score ".txt")]
+  (let [solution (solution @*log)
+        score    (score)
+        file     (str "answers/problem " problem "/" score)]
     (println solution)
     (println "--- end ---")
     (println "Score:" score)
     (println "File:" file)
+    (.mkdirs (io/file (str "answers/problem " problem)))
     (spit file solution)))
 
 (defn tool [tool label]
