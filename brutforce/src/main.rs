@@ -166,6 +166,10 @@ impl Shape {
             }
         }
     }
+
+    fn area(&self) -> Coord {
+        self.widht() * self.height()
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -272,6 +276,8 @@ enum Operation {
 #[derive(Debug)]
 pub struct Picture {
     counter: u32,
+    width: Coord,
+    height: Coord,
     blocks: HashMap<BlockId, Block>
 }
 
@@ -280,6 +286,8 @@ impl Picture {
     fn initial() -> Self {
         return Picture {
             counter: 0,
+            width: 400,
+            height: 400,
             blocks: HashMap::from([("0".to_string(),
                                     Block::Simple { shape: Shape::square(400),
                                                     color: Color::WHITE
@@ -393,6 +401,55 @@ impl Picture {
             }
             // Operation::Merge { .. } => {}
             _ => todo!()
+        }
+    }
+
+    fn cost(&self, op: Operation) -> Result<u64, Error> {
+        const X_CUT_COST: i32 = 7;
+        const Y_CUT_COST: i32 = 7;
+        const P_CUT_COST: i32 = 10;
+        const COLOR_COST: i32 = 5;
+        const SWAP_COST: i32 = 3;
+        const MERGE_COST: i32 = 1;
+
+        match op {
+            Operation::Color { id, .. } => {
+                let block = self.blocks.get(&id).ok_or_else(|| format!("Can't cost Color no block with id: {:?}", id))?;
+                let area = block.shape().area();
+                let base = COLOR_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
+            Operation::PCut { id, .. } => {
+                let block = self.blocks.get(&id).ok_or_else(|| format!("Can't cost PCut no block with id: {:?}", id))?;
+                let area = block.shape().area();
+                let base = P_CUT_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
+            Operation::XCut { id, .. } => {
+                let block = self.blocks.get(&id).ok_or_else(|| format!("Can't cost XCut no block with id: {:?}", id))?;
+                let area = block.shape().area();
+                let base = X_CUT_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
+            Operation::YCut { id, .. } => {
+                let block = self.blocks.get(&id).ok_or_else(|| format!("Can't cost YCut no block with id: {:?}", id))?;
+                let area = block.shape().area();
+                let base = Y_CUT_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
+            Operation::Swap { id1, .. } => {
+                let block = self.blocks.get(&id1).ok_or_else(|| format!("Can't cost Swap no block with id: {:?}", id1))?;
+                let area = block.shape().area();
+                let base = SWAP_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
+            Operation::Merge { id1, id2 } => {
+                let block1 = self.blocks.get(&id1).ok_or_else(|| format!("Can't cost Merge no block with id: {:?}", id1))?;
+                let block2 = self.blocks.get(&id2).ok_or_else(|| format!("Can't cost Merge no block with id: {:?}", id1))?;
+                let area = block1.shape().area() + block2.shape().area();
+                let base = MERGE_COST;
+                Ok(((base * self.width * self.height) as f64 / area as f64).round() as u64)
+            }
         }
     }
 
