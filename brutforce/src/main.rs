@@ -3,7 +3,7 @@
 extern crate core;
 
 use std::env;
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 use image::io::Reader as ImageReader;
 use image::{Rgba, RgbaImage};
 
@@ -50,7 +50,7 @@ impl Shape {
     pub fn xcut(&self, x: Coord) -> Result<Vec<Shape>, Error> {
         match *self {
             Shape::Rect { l, b, r, t } => {
-                if !(x < r && l < x) {
+                if !(l < x && x < r) {
                     return Err(format!("Failed to xcut {:?} doesn't contain {:?}", self, x));
                 }
                 Ok(vec![Shape::Rect { l: l, b: b, r: x, t: t },
@@ -62,7 +62,7 @@ impl Shape {
     pub fn ycut(&self, y: Coord) -> Result<Vec<Shape>, Error> {
         match *self {
             Shape::Rect { l, b, r, t } => {
-                if !(t < t && b < y) {
+                if !(b < y && y < t) {
                     return Err(format!("Failed to ycut {:?} doesn't contain {:?}", self, y));
                 }
                 Ok(vec![Shape::Rect { l: l, b: b, r: r, t: y },
@@ -307,21 +307,19 @@ pub struct Picture {
     counter: u32,
     width: Coord,
     height: Coord,
-    blocks: HashMap<BlockId, Block>
+    blocks: FxHashMap<BlockId, Block>
 }
 
 
 impl Picture {
     fn initial() -> Self {
+        let mut blocks = FxHashMap::default();
+        blocks.insert("0".to_string(), Block::Simple { shape: Shape::square(400), color: Color::WHITE });
         return Picture {
             counter: 0,
             width: 400,
             height: 400,
-            blocks: HashMap::from([("0".to_string(),
-                                    Block::Simple { shape: Shape::square(400),
-                                                    color: Color::WHITE
-                                    })
-            ])
+            blocks: blocks
         }
     }
 
@@ -563,7 +561,6 @@ impl Problem {
 }
 
 fn try_logs(logs: Vec<Log>, problem: &Problem) {
-    // let mut best_log = None;
     let mut best_score = None;
     for log in &logs {
         let mut picture = Picture::initial();
@@ -576,17 +573,14 @@ fn try_logs(logs: Vec<Log>, problem: &Problem) {
         let score = similarity + cost;
 
         if best_score.is_none() || score < best_score.unwrap() {
-            // best_log = Some(log);
             best_score = Some(score);
-            // println!("{:?} {:?}", score, log);
             let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
             println!("{}|{}", score, strs.join("|"))
         }
     }
-    // println!("{:?}", best_log.unwrap());
 }
 
-fn algo_vsplit(problem: &Problem) -> Vec<Log> {
+fn algo_xcut(problem: &Problem) -> Vec<Log> {
     let step = 20;
     return (step..(400 - 3 * step)).step_by(step).flat_map(|x1| {
         ((x1+step)..(400 - 2 * step)).step_by(step).flat_map(move |x2| {
@@ -613,10 +607,75 @@ fn algo_vsplit(problem: &Problem) -> Vec<Log> {
     }).collect();
 }
 
+fn algo_ycut(problem: &Problem) -> Vec<Log> {
+    let step = 20;
+    return (step..(400 - 3 * step)).step_by(step).flat_map(|y1| {
+        ((y1+step)..(400 - 2 * step)).step_by(step).flat_map(move |y2| {
+            ((y2+step)..(400 - 1 * step)).step_by(step).flat_map(move |y3| {
+                ((y3+step)..(400 - 0 * step)).step_by(step).map(move |y4| {
+                    let c1 = problem.average_color(0, 0, 400, y1 as i32);
+                    let c2 = problem.average_color(0, y1 as i32, 400, y2 as i32);
+                    let c3 = problem.average_color(0, y2 as i32, 400, y3 as i32);
+                    let c4 = problem.average_color(0, y3 as i32, 400, y4 as i32);
+                    let c5 = problem.average_color(0, y4 as i32, 400, 400);
+
+                    return vec![Operation::Color { id: "0".to_string(), color: c1 },
+                                Operation::YCut { id: "0".to_string(), y: y1 as i32 },
+                                Operation::Color { id: "0.1".to_string(), color: c2 },
+                                Operation::YCut { id: "0.1".to_string(), y: y2 as i32 },
+                                Operation::Color { id: "0.1.1".to_string(), color: c3 },
+                                Operation::YCut { id: "0.1.1".to_string(), y: y3 as i32 },
+                                Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
+                                Operation::YCut { id: "0.1.1.1".to_string(), y: y4 as i32 },
+                                Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }];
+                })
+            })
+        })
+    }).collect();
+}
+
+fn algo_rect(problem: &Problem) -> Vec<Log> {
+    let step = 20;
+    return (step..(400 - step)).step_by(step).flat_map(|l| {
+        ((l+step)..400).step_by(step).flat_map(move |r| {
+            (step..(400 - step)).step_by(step).flat_map(move |b| {
+                ((b+step)..400).step_by(step).map(move |t| {
+                    let c00  = problem.average_color(0, 0, l as i32, b as i32);
+                    let c01  = problem.average_color(l as i32, 0, 400, b as i32);
+                    let c020 = problem.average_color(l as i32, b as i32, r as i32, t as i32);
+                    let c021 = problem.average_color(r as i32, b as i32, 400, t as i32);
+                    let c022 = problem.average_color(r as i32, t as i32, 400, 400);
+                    let c023 = problem.average_color(l as i32, t as i32, r as i32, 400);
+                    let c03  = problem.average_color(0, b as i32, l as i32, 400);
+
+                    return vec![Operation::Color { id: "0".to_string(), color: c00 },
+                                Operation::PCut { id: "0".to_string(), point: Point { x: l as i32, y: b as i32 }},
+                                Operation::Color { id: "0.2".to_string(), color: c020 },
+                                Operation::PCut { id: "0.2".to_string(), point: Point { x: r as i32, y: t as i32 }},
+                                Operation::Color { id: "0.1".to_string(), color: c01 },
+                                Operation::Color { id: "0.2.1".to_string(), color: c021 },
+                                Operation::Color { id: "0.2.2".to_string(), color: c022 },
+                                Operation::Color { id: "0.2.3".to_string(), color: c023 },
+                                Operation::Color { id: "0.3".to_string(), color: c03 }];
+                })
+            })
+        })
+    }).collect();
+}
+
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let num: i32 = args[1].parse().expect("Wanted a number");
 
     let problem = Problem::load(num).unwrap();
-    try_logs(algo_vsplit(&problem), &problem);
+    if "xcut" == args[2] {
+        try_logs(algo_xcut(&problem), &problem);
+    } else if "ycut" == args[2] {
+        try_logs(algo_ycut(&problem), &problem);
+    } else if "rect" == args[2] {
+        try_logs(algo_rect(&problem), &problem);
+    } else {
+        panic!("Unknown algorithm {}", args[2]);
+    }
 }

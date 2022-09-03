@@ -47,7 +47,7 @@
 (def *preview
   (atom nil))
 
-(defmulti transform                                         ; => picture'
+(defmulti transform ; => picture'
   (fn [picture op]
     (first op)))
 
@@ -120,7 +120,7 @@
   (update-in picture [:blocks id] (fn [block]
                                     (SimpleBlock. (:shape block) color))))
 
-(defmethod transform :pcut [picture [_ id [x y]]]
+(defmethod transform :pcut [picture [_ id [x y] :as cmd]]
   (assert (contains? (:blocks picture) id) (str ":pcut No block " id))
   (let [block (get-in picture [:blocks id])
         new-blocks  (map-indexed (fn [ind block]
@@ -257,7 +257,7 @@
     n))
 
 (def problem
-  "19")
+  "18")
 
 (def snap
   (case problem
@@ -603,7 +603,7 @@
               (reset! *picture picture))
             (swap! *status inc)
             (redraw)))
-        (reset! *status (format "Done in %,.d ms" (/ (- (System/currentTimeMillis) t0) 1000.0))))
+        (reset! *status (format "Done in %,.1f s" (/ (- (System/currentTimeMillis) t0) 1000.0))))
       (catch Throwable t
         (reset! *status (.getMessage t))
         (.printStackTrace t)))))
@@ -612,7 +612,7 @@
   (condp re-matches cmd
     #"cut \[([0-9.]+)\] \[(\d+), (\d+)\]"
     :>> (fn [[_ id x y]]
-          [:pcut id (parse-long x) (parse-long y)])
+          [:pcut id [(parse-long x) (parse-long y)]])
     
     #"cut \[([0-9.]+)\] \[[xX]\] \[(\d+)\]"
     :>> (fn [[_ id x]]
@@ -647,13 +647,14 @@
                    picture (reduce transform start-picture log)]
                (reset! *log log)
                (reset! *picture picture)
-               (reset! *status (format "%,.1f ms: Found %s" (/ (- (System/currentTimeMillis) t0) 1000.0) score))
+               (reset! *status (format "%,.1f s: Found %s" (/ (- (System/currentTimeMillis) t0) 1000.0) score))
                (redraw)))}
-          (concat ["cargo" "-q" "run" "--release" problem] args))
-        (reset! *status (format "Done in %,.1f ms" (/ (- (System/currentTimeMillis) t0) 1000.0)))
+          (concat ["cargo" "-q" "run" "--release" problem algo] args))
+        (reset! *status (format "Done in %,.1f s" (/ (- (System/currentTimeMillis) t0) 1000.0)))
         (redraw))
       (catch Throwable t
         (reset! *status (.getMessage t))
+        (redraw)
         (.printStackTrace t)))))  
 
 (defn submit [problem solution]
@@ -681,8 +682,8 @@
         (priority-map) colors))))
 
 (defn color-variants [colors]
-  [#_(average colors)
-   (most-common colors)])
+  [(average colors)
+   #_(most-common colors)])
 
 (defonce *original-cache
   (volatile! {}))
@@ -690,18 +691,18 @@
 (defmacro cached [key & body]
   `(let [key# ~key]
      (or
-       #_(@*original-cache key#)
+       (@*original-cache key#)
        (let [val# (do ~@body)]
-         #_(vswap! *original-cache assoc key# val#)
+         (vswap! *original-cache assoc key# val#)
          val#))))
 
 (defn algo-hsplit []
-  (let [step 50]
+  (let [step 25]
     (for [y1 (range step        (- 400 (* 3 step)) step)
           y2 (range (+ y1 step) (- 400 (* 2 step)) step)
           y3 (range (+ y2 step) (- 400 (* 1 step)) step)
-          ; y4 (range (+ y3 step) (- 400 (* 0 step)) step)
-          :let [y4      400
+          y4 (range (+ y3 step) (- 400 (* 0 step)) step)
+          :let [y5 400
                 colors1 (cached [:hsplit/colors 0 0 400 y1]
                           (for [x (range 0 400)
                                 y (range 0 y1)]
@@ -717,6 +718,10 @@
                 colors4 (cached [:hsplit/colors 0 y3 400 y4]
                           (for [x (range 0 400)
                                 y (range y3 y4)]
+                            (get-color original-bytes x y)))
+                colors5 (cached [:hsplit/colors 0 y4 400 y5]
+                          (for [x (range 0 400)
+                                y (range y4 y5)]
                             (get-color original-bytes x y)))]
           color1 (cached [:hsplit/color-variants 0 0 400 y1]
                    (color-variants colors1))
@@ -725,14 +730,18 @@
           color3 (cached [:hsplit/color-variants 0 y2 400 y3]
                    (color-variants colors3))
           color4 (cached [:hsplit/color-variants 0 y3 400 y4]
-                   (color-variants colors4))]
+                   (color-variants colors4))
+          color5 (cached [:hsplit/color-variants 0 y4 400 y5]
+                   (color-variants colors5))]
       [[:color "0"         color1]
        [:ycut  "0"         y1]
        [:color "0.1"       color2]
        [:ycut  "0.1"       y2]    
        [:color "0.1.1"     color3]
        [:ycut  "0.1.1"     y3]
-       [:color "0.1.1.1"   color4]])))
+       [:color "0.1.1.1"   color4]
+       [:ycut  "0.1.1.1"   y4]
+       [:color "0.1.1.1.1" color5]])))
 
 (defn algo-rect []
   (let [step 50]
@@ -861,8 +870,16 @@
            (ui/gap 0 10)
            (ui/row
              [:stretch 1
-              (ui/button #(try-rust! problem "vsplit")
-                (ui/label "brute vsplit"))])
+              (ui/button #(try-rust! problem "xcut")
+                (ui/label "xcut"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (ui/button #(try-rust! problem "ycut")
+                (ui/label "ycut"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (ui/button #(try-rust! problem "rect")
+                (ui/label "rect"))])
 
            (ui/gap 0 10)
 
@@ -885,7 +902,7 @@
 
            (ui/gap 0 15)
            (ui/dynamic _ [status @*status]
-             (ui/label (str "Status: " status)))
+             (ui/label status))
            
            (ui/gap 0 15)
            (ui/row
