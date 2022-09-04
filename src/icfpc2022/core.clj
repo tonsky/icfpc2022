@@ -23,6 +23,9 @@
 
 (set! *unchecked-math* true)
 
+(def sample-rate
+  5)
+
 (defonce lock
   (Object.))
 
@@ -47,6 +50,12 @@
     (< x r)
     (<= b y)
     (< y t)))
+
+(defn simple? [block]
+  (assert (or 
+            (instance? SimpleBlock block)
+            (instance? ComplexBlock block)))
+  (instance? SimpleBlock block))
 
 (def *cache
   (volatile! {}))
@@ -154,6 +163,13 @@
         g   (byte->long (aget bytes (+ idx 1)))
         b   (byte->long (aget bytes (+ idx 2)))]
     [r g b]))
+
+(defn colors [^bytes bytes [l b r t]]
+  (cached [::colors l b r t]
+    (vec
+      (for [x (range l r sample-rate)
+            y (rrange b t sample-rate)]
+        (get-color bytes x y)))))
 
 (defn average [colors]
   (let [[r g b] (reduce

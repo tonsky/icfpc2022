@@ -25,11 +25,11 @@
                   {color-to :color
                    rect-to :rect} (picture' id-to)
                   sim-before (+
-                               (score/block-similarity bytes color-from rect-from)
-                               (score/block-similarity bytes color-to rect-to))
+                               (score/color-similarity bytes color-from rect-from)
+                               (score/color-similarity bytes color-to rect-to))
                   sim-after  (+
-                               (score/block-similarity bytes color-from rect-to)
-                               (score/block-similarity bytes color-to rect-from))]
+                               (score/color-similarity bytes color-from rect-to)
+                               (score/color-similarity bytes color-to rect-from))]
               (if (> (- sim-before sim-after) (score/op-cost :swap rect-from))
                 (let [op [:swap id-from id-to]
                       picture'' (transform/transform picture' op)]

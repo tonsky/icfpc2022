@@ -14,7 +14,7 @@
  {:opts
   {:jvm-opts ["-server"
               "-Duser.language=en-US"
-              "-ea"
+              ; "-ea"
               ; "--add-modules=jdk.incubator.foreign"
               ; "--enable-native-access=ALL-UNNAMED"
               "-Djdk.attach.allowAttachSelf"

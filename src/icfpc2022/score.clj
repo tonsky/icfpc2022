@@ -8,7 +8,7 @@
 
 (set! *unchecked-math* true)
 
-(defn block-similarity [^bytes p1 [r2 g2 b2] [l b r t]]
+(defn color-similarity [^bytes p1 [r2 g2 b2] [l b r t]]
   (let [l  (long l)
         b  (long b)
         r  (long r)
@@ -40,6 +40,12 @@
                   (* (- r1 r2) (- r1 r2))
                   (* (- g1 g2) (- g1 g2))
                   (* (- b1 b2) (- b1 b2)))))))))))
+
+(defn block-similarity [^bytes p1 block]
+  (if (core/simple? block)
+    (color-similarity p1 (:color block) (:rect block))
+    (reduce (fn [acc block]
+              (+ acc (block-similarity p1 block))) 0 (:children block))))
 
 (defn similarity
   ([p1 p2]

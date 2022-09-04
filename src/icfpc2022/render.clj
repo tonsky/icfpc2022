@@ -6,6 +6,7 @@
     [clojure.math :as math]
     [clojure.string :as str]
     [icfpc2022.algo.merge :as algo.merge]
+    [icfpc2022.algo.paint :as algo.paint]
     [icfpc2022.algo.rect :as algo.rect]
     [icfpc2022.algo.swap :as algo.swap]
     [icfpc2022.algo.ycut :as algo.ycut]
@@ -396,7 +397,6 @@
 
                (ui/gap 0 10)
                (ui/row
-                 ;; picker
                  (ui/width btn-width
                    (ui/dynamic _ [tool @*tool]
                      (if (= :color (first tool))
@@ -414,13 +414,11 @@
              
                  (ui/gap 10 0)   
              
-                 ;; swap
                  (ui/width btn-width 
                    (tool [:swap] (ui/label "Swap")))
              
                  (ui/gap 10 0)
              
-                 ;; merge
                  (ui/width btn-width 
                    (tool [:merge] (ui/label "Merge"))))
                       
@@ -447,6 +445,10 @@
                  (ui/width btn-width
                    (ui/button #(try-clj! (algo.merge/merge (:problem/picture problem)))
                      (ui/label "Merge")))
+                 (ui/gap 10 0)
+                 (ui/width btn-width
+                   (ui/button #(try-clj! (algo.paint/paint problem))
+                     (ui/label "Paint")))
                  (ui/gap 10 0))
            
                (ui/gap 0 20)
@@ -501,7 +503,9 @@
                  (ui/gap 10 0)
                  (ui/width btn-width 
                    (ui/button
-                     #(reset! *log [])
+                     #(do
+                        (reset! *log [])
+                        (reset! *status "Ready"))
                      {:bg 0xFFFEB2B2}
                      (ui/label "Reset"))))
            
