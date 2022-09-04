@@ -103,8 +103,8 @@
 
 (defn same-rect? [[l1 b1 r1 t1] [l2 b2 r2 t2]]
   (and
-    (= (- r1 l1) (r2 l2))
-    (= (- t1 b1) (t2 b2))))
+    (= (- r1 l1) (- r2 l2))
+    (= (- t1 b1) (- t2 b2))))
 
 (defmethod transform :swap [picture [_ id1 id2]]
   (let [block1 (picture id1)

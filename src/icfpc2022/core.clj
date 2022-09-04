@@ -219,8 +219,8 @@
         (let [[_ id1 id2] op]
           (format "merge [%s] [%s]" id1 id2))))))
 
-(defn save [problem-id log score]
-  (let [serialized (serialize log)
+(defn save [problem-id a-log score]
+  (let [serialized (serialize a-log)
         dir        (str "answers/problem " problem-id)
         file       (io/file dir (str score))]
     (log "Writing" file)
