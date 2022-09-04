@@ -541,6 +541,7 @@ impl Picture {
     }
 }
 
+#[derive(Clone)]
 struct Problem {
     image: RgbaImage,
     initial: Picture,
@@ -638,86 +639,67 @@ impl Problem {
     }
 }
 
-fn try_logs(logs: Vec<Log>, problem: &Problem) {
-    let mut best_score = None;
-    for log in &logs {
-        let mut picture = problem.initial.clone();
-        let mut cost = 0;
-        log.iter().for_each(|op| {
-            cost += picture.cost(op.clone()).unwrap();
-            picture.apply(op.clone()).unwrap();
-        });
-        let similarity = problem.similarity(&picture).unwrap();
-        let score = similarity + cost;
-
-        if best_score.is_none() || score < best_score.unwrap() {
-            best_score = Some(score);
-            let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
-            println!("{}|{}", score, strs.join("|"))
-        }
-    }
-}
-
-fn algo_xcut(problem: &Problem) -> Vec<Log> {
-    let step = 10;
-    return (step..(400 - 3 * step)).step_by(step).flat_map(|x1| {
-        ((x1+step)..(400 - 2 * step)).step_by(step).flat_map(move |x2| {
-            ((x2+step)..(400 - 1 * step)).step_by(step).flat_map(move |x3| {
-                ((x3+step)..(400 - 0 * step)).step_by(step).map(move |x4| {
+fn algo_xcut(problem: &Problem, step: Coord) {
+    let mut log_collector = LogCollector::new((*problem).clone());
+    let step = step as usize;
+    (step..(400 - 3 * step)).step_by(step).for_each(|x1| {
+        ((x1+step)..(400 - 2 * step)).step_by(step).for_each(|x2| {
+            ((x2+step)..(400 - 1 * step)).step_by(step).for_each(|x3| {
+                ((x3+step)..(400 - 0 * step)).step_by(step).for_each(|x4| {
                     let c1 = problem.color(0, 0, x1 as i32, 400);
                     let c2 = problem.color(x1 as i32, 0, x2 as i32, 400);
                     let c3 = problem.color(x2 as i32, 0, x3 as i32, 400);
                     let c4 = problem.color(x3 as i32, 0, x4 as i32, 400);
                     let c5 = problem.color(x4 as i32, 0, 400, 400);
-
-                    return vec![Operation::Color { id: "0".to_string(), color: c1 },
-                                Operation::XCut { id: "0".to_string(), x: x1 as i32 },
-                                Operation::Color { id: "0.1".to_string(), color: c2 },
-                                Operation::XCut { id: "0.1".to_string(), x: x2 as i32 },
-                                Operation::Color { id: "0.1.1".to_string(), color: c3 },
-                                Operation::XCut { id: "0.1.1".to_string(), x: x3 as i32 },
-                                Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
-                                Operation::XCut { id: "0.1.1.1".to_string(), x: x4 as i32 },
-                                Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }];
+                    log_collector.try_log(vec![Operation::Color { id: "0".to_string(), color: c1 },
+                                               Operation::XCut { id: "0".to_string(), x: x1 as i32 },
+                                               Operation::Color { id: "0.1".to_string(), color: c2 },
+                                               Operation::XCut { id: "0.1".to_string(), x: x2 as i32 },
+                                               Operation::Color { id: "0.1.1".to_string(), color: c3 },
+                                               Operation::XCut { id: "0.1.1".to_string(), x: x3 as i32 },
+                                               Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
+                                               Operation::XCut { id: "0.1.1.1".to_string(), x: x4 as i32 },
+                                               Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }]);
                 })
             })
         })
-    }).collect();
+    });
 }
 
-fn algo_ycut(problem: &Problem) -> Vec<Log> {
-    let step = 10;
-    return (step..(400 - 3 * step)).step_by(step).flat_map(|y1| {
-        ((y1+step)..(400 - 2 * step)).step_by(step).flat_map(move |y2| {
-            ((y2+step)..(400 - 1 * step)).step_by(step).flat_map(move |y3| {
-                ((y3+step)..(400 - 0 * step)).step_by(step).map(move |y4| {
+fn algo_ycut(problem: &Problem, step: Coord) {
+    let mut log_collector = LogCollector::new((*problem).clone());
+    let step = step as usize;
+    (step..(400 - 3 * step)).step_by(step).for_each(|y1| {
+        ((y1+step)..(400 - 2 * step)).step_by(step).for_each(|y2| {
+            ((y2+step)..(400 - 1 * step)).step_by(step).for_each(|y3| {
+                ((y3+step)..(400 - 0 * step)).step_by(step).for_each( |y4| {
                     let c1 = problem.color(0, 0, 400, y1 as i32);
                     let c2 = problem.color(0, y1 as i32, 400, y2 as i32);
                     let c3 = problem.color(0, y2 as i32, 400, y3 as i32);
                     let c4 = problem.color(0, y3 as i32, 400, y4 as i32);
                     let c5 = problem.color(0, y4 as i32, 400, 400);
-
-                    return vec![Operation::Color { id: "0".to_string(), color: c1 },
-                                Operation::YCut { id: "0".to_string(), y: y1 as i32 },
-                                Operation::Color { id: "0.1".to_string(), color: c2 },
-                                Operation::YCut { id: "0.1".to_string(), y: y2 as i32 },
-                                Operation::Color { id: "0.1.1".to_string(), color: c3 },
-                                Operation::YCut { id: "0.1.1".to_string(), y: y3 as i32 },
-                                Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
-                                Operation::YCut { id: "0.1.1.1".to_string(), y: y4 as i32 },
-                                Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }];
+                    log_collector.try_log(vec![Operation::Color { id: "0".to_string(), color: c1 },
+                                               Operation::YCut { id: "0".to_string(), y: y1 as i32 },
+                                               Operation::Color { id: "0.1".to_string(), color: c2 },
+                                               Operation::YCut { id: "0.1".to_string(), y: y2 as i32 },
+                                               Operation::Color { id: "0.1.1".to_string(), color: c3 },
+                                               Operation::YCut { id: "0.1.1".to_string(), y: y3 as i32 },
+                                               Operation::Color { id: "0.1.1.1".to_string(), color: c4 },
+                                               Operation::YCut { id: "0.1.1.1".to_string(), y: y4 as i32 },
+                                               Operation::Color { id: "0.1.1.1.1".to_string(), color: c5 }]);
                 })
             })
         })
-    }).collect();
+    });
 }
 
-fn algo_rect(problem: &Problem) -> Vec<Log> {
-    let step = 16;
-    return (step..(400 - step)).step_by(step).flat_map(|l| {
-        ((l+step)..400).step_by(step).flat_map(move |r| {
-            (step..(400 - step)).step_by(step).flat_map(move |b| {
-                ((b+step)..400).step_by(step).map(move |t| {
+fn algo_rect(problem: &Problem, step: Coord) {
+    let mut log_collector = LogCollector::new((*problem).clone());
+    let step = step as usize;
+    (step..(400 - step)).step_by(step).for_each(|l| {
+        ((l+step)..400).step_by(step).for_each(|r| {
+            (step..(400 - step)).step_by(step).for_each(|b| {
+                ((b+step)..400).step_by(step).for_each(|t| {
                     let c00  = problem.color(0, 0, l as i32, b as i32);
                     let c01  = problem.color(l as i32, 0, 400, b as i32);
                     let c020 = problem.color(l as i32, b as i32, r as i32, t as i32);
@@ -725,64 +707,64 @@ fn algo_rect(problem: &Problem) -> Vec<Log> {
                     let c022 = problem.color(r as i32, t as i32, 400, 400);
                     let c023 = problem.color(l as i32, t as i32, r as i32, 400);
                     let c03  = problem.color(0, b as i32, l as i32, 400);
-
-                    return vec![Operation::Color { id: "0".to_string(), color: c00 },
-                                Operation::PCut { id: "0".to_string(), point: Point { x: l as i32, y: b as i32 }},
-                                Operation::Color { id: "0.2".to_string(), color: c020 },
-                                Operation::PCut { id: "0.2".to_string(), point: Point { x: r as i32, y: t as i32 }},
-                                Operation::Color { id: "0.1".to_string(), color: c01 },
-                                Operation::Color { id: "0.2.1".to_string(), color: c021 },
-                                Operation::Color { id: "0.2.2".to_string(), color: c022 },
-                                Operation::Color { id: "0.2.3".to_string(), color: c023 },
-                                Operation::Color { id: "0.3".to_string(), color: c03 }];
+                    log_collector.try_log(vec![Operation::Color { id: "0".to_string(), color: c00 },
+                                               Operation::PCut { id: "0".to_string(), point: Point { x: l as i32, y: b as i32 }},
+                                               Operation::Color { id: "0.2".to_string(), color: c020 },
+                                               Operation::PCut { id: "0.2".to_string(), point: Point { x: r as i32, y: t as i32 }},
+                                               Operation::Color { id: "0.1".to_string(), color: c01 },
+                                               Operation::Color { id: "0.2.1".to_string(), color: c021 },
+                                               Operation::Color { id: "0.2.2".to_string(), color: c022 },
+                                               Operation::Color { id: "0.2.3".to_string(), color: c023 },
+                                               Operation::Color { id: "0.3".to_string(), color: c03 }]);
                 })
             })
         })
-    }).collect();
+    });
 }
 
-fn algo_x3y2(problem: &Problem) -> Vec<Log> {
-    let step = 40;
-    return (step..(400 - step)).step_by(step).flat_map(move |x1| {
-        ((x1 + step)..400).step_by(step).flat_map(move |x2| {
-            (step..400).step_by(step).flat_map(move |y1| {
-                (step..400).step_by(step).flat_map(move |y2| {
-                    (step..400).step_by(step).map(move |y3| {
+fn algo_x3y2(problem: &Problem, step: Coord){
+    let mut log_collector = LogCollector::new((*problem).clone());
+    let step = step as usize;
+    (step..(400 - step)).step_by(step).for_each(|x1| {
+        ((x1 + step)..400).step_by(step).for_each(|x2| {
+            (step..400).step_by(step).for_each(|y1| {
+                (step..400).step_by(step).for_each(|y2| {
+                    (step..400).step_by(step).for_each(|y3| {
                         let c000  = problem.color(0, 0, x1 as i32, y1 as i32);
                         let c001  = problem.color(0, y1 as i32, x1 as i32, 400);
                         let c0100 = problem.color(x1 as i32, 0, x2 as i32, y2 as i32);
                         let c0101 = problem.color(x1 as i32, y2 as i32, x2 as i32, 400);
                         let c0110 = problem.color(x2 as i32, 0, 400, y3 as i32);
                         let c0111 = problem.color(x2 as i32, y3 as i32, 400, 400);
-                        
-                        return vec![Operation::Color { id: "0".to_string(), color: c000 },
-                                    Operation::XCut  { id: "0".to_string(), x: x1 as i32},
-                                    Operation::Color { id: "0.1".to_string(), color: c0100 },
-                                    Operation::XCut  { id: "0.1".to_string(), x: x2 as i32},
-                                    Operation::Color { id: "0.1.1".to_string(), color: c0110 },
-                                    Operation::YCut  { id: "0.0".to_string(), y: y1 as i32},
-                                    Operation::Color { id: "0.0.1".to_string(), color: c001 },
-                                    Operation::YCut  { id: "0.1.0".to_string(), y: y2 as i32},
-                                    Operation::Color { id: "0.1.0.1".to_string(), color: c0101 },
-                                    Operation::YCut  { id: "0.1.1".to_string(), y: y3 as i32},
-                                    Operation::Color { id: "0.1.1.1".to_string(), color: c0111 }];
+                        log_collector.try_log(vec![Operation::Color { id: "0".to_string(), color: c000 },
+                                                   Operation::XCut  { id: "0".to_string(), x: x1 as i32},
+                                                   Operation::Color { id: "0.1".to_string(), color: c0100 },
+                                                   Operation::XCut  { id: "0.1".to_string(), x: x2 as i32},
+                                                   Operation::Color { id: "0.1.1".to_string(), color: c0110 },
+                                                   Operation::YCut  { id: "0.0".to_string(), y: y1 as i32},
+                                                   Operation::Color { id: "0.0.1".to_string(), color: c001 },
+                                                   Operation::YCut  { id: "0.1.0".to_string(), y: y2 as i32},
+                                                   Operation::Color { id: "0.1.0.1".to_string(), color: c0101 },
+                                                   Operation::YCut  { id: "0.1.1".to_string(), y: y3 as i32},
+                                                   Operation::Color { id: "0.1.1.1".to_string(), color: c0111 }]);
                     })
                 })
             })
         })
-    }).collect();
+    });
 }
 
-fn algo_x3y3(problem: &Problem) -> Vec<Log> {
-    let step = 50;
-    return (step..(400 - step)).step_by(step).flat_map(move |x1| {
-        ((x1 + step)..400).step_by(step).flat_map(move |x2| {
-            (step..(400 - step)).step_by(step).flat_map(move |y1| {
-                ((y1 + step)..400).step_by(step).flat_map(move |y2| {
-                    (step..(400 - step)).step_by(step).flat_map(move |y3| {
-                        ((y3 + step)..400).step_by(step).flat_map(move |y4| {
-                            (step..(400 - step)).step_by(step).flat_map(move |y5| {
-                                ((y5 + step)..400).step_by(step).map(move |y6| {
+fn algo_x3y3(problem: &Problem, step: Coord) {
+    let mut log_collector = LogCollector::new((*problem).clone());
+    let step = step as usize;
+    (step..(400 - step)).step_by(step).for_each(|x1| {
+        ((x1 + step)..400).step_by(step).for_each(|x2| {
+            (step..(400 - step)).step_by(step).for_each(|y1| {
+                ((y1 + step)..400).step_by(step).for_each(|y2| {
+                    (step..(400 - step)).step_by(step).for_each(|y3| {
+                        ((y3 + step)..400).step_by(step).for_each(|y4| {
+                            (step..(400 - step)).step_by(step).for_each(|y5| {
+                                ((y5 + step)..400).step_by(step).for_each(|y6| {
 
                                     let c000   = problem.color(0, 0, x1 as i32, y1 as i32);
                                     let c0010  = problem.color(0, y1 as i32, x1 as i32, y2 as i32);
@@ -795,8 +777,7 @@ fn algo_x3y3(problem: &Problem) -> Vec<Log> {
                                     let c0110  = problem.color(x2 as i32, 0, 400, y1 as i32);
                                     let c01110 = problem.color(x2 as i32, y1 as i32, 400, y2 as i32);
                                     let c01111 = problem.color(x2 as i32, y2 as i32, 400, 400);
-                        
-                                    return vec![
+                                    log_collector.try_log(vec![
                                         Operation::Color { id: "0".to_string(), color: c000 },
                                         Operation::XCut  { id: "0".to_string(), x: x1 as i32},
                                         Operation::Color { id: "0.1".to_string(), color: c0100 },
@@ -817,7 +798,7 @@ fn algo_x3y3(problem: &Problem) -> Vec<Log> {
                                         Operation::Color { id: "0.1.1.1".to_string(), color: c01110 },
                                         Operation::YCut  { id: "0.1.1.1".to_string(), y: y6 as i32},
                                         Operation::Color { id: "0.1.1.1.1".to_string(), color: c01111 }
-                                    ];
+                                    ]);
                                 })
                             })
                         })
@@ -825,7 +806,45 @@ fn algo_x3y3(problem: &Problem) -> Vec<Log> {
                 })
             })
         })
-    }).collect();
+    });
+}
+
+// fn algo_grid(problem: &Problem, grid_step: Coord) {
+//
+// }
+
+fn calculate_log_score(problem: &Problem, log: &Log) -> u64 {
+    let mut picture = problem.initial.clone();
+    let mut log_cost = 0;
+    log.iter().for_each(|op| {
+        log_cost += picture.cost(op.clone()).unwrap();
+        picture.apply(op.clone()).unwrap();
+    });
+    let similarity = problem.similarity(&picture).unwrap();
+    return similarity + log_cost;
+}
+
+struct LogCollector {
+    problem: Problem,
+    best_score: Option<u64>,
+}
+
+impl LogCollector {
+    fn new(problem: Problem) -> Self {
+        Self {
+            problem,
+            best_score: None
+        }
+    }
+
+    fn try_log(&mut self, log: Log) {
+        let score = calculate_log_score(&self.problem, &log);
+        if self.best_score.is_none() || score < self.best_score.unwrap() {
+            self.best_score = Some(score);
+            let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
+            println!("{}|{}", score, strs.join("|"));
+        }
+    }
 }
 
 fn main() {
@@ -834,15 +853,15 @@ fn main() {
 
     let problem = Problem::load(num).unwrap();
     if "xcut" == args[2] {
-        try_logs(algo_xcut(&problem), &problem);
+        algo_xcut(&problem, 10);
     } else if "ycut" == args[2] {
-        try_logs(algo_ycut(&problem), &problem);
+        algo_ycut(&problem, 10);
     } else if "rect" == args[2] {
-        try_logs(algo_rect(&problem), &problem);
+        algo_rect(&problem, 16);
     } else if "x3y2" == args[2] {
-        try_logs(algo_x3y2(&problem), &problem);
+        algo_x3y2(&problem, 40);
     } else if "x3y3" == args[2] {
-        try_logs(algo_x3y3(&problem), &problem);
+        algo_x3y3(&problem, 50);
     } else {
         panic!("Unknown algorithm {}", args[2]);
     }

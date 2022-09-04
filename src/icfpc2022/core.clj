@@ -3,7 +3,8 @@
   (:require
     [clojure.java.io :as io])
   (:import
-    [java.io File]))
+    [java.io File]
+    (java.lang ProcessBuilder$Redirect)))
 
 (defonce lock
   (Object.))
@@ -19,12 +20,12 @@
         {:keys [on-output]} opts
         pb (-> (ProcessBuilder. (vec cmd))
              (.directory (io/file "brutforce"))
-             (.redirectErrorStream true))
+             (.redirectError ProcessBuilder$Redirect/INHERIT))
         proc (.start pb)]
     (doseq [line (line-seq (.inputReader proc))]
       (when on-output
         (on-output line)))
-    #_(log (format "[ DONE ] Process %s exited with code %d in %,.1f sec" cmd (.waitFor proc) (/ (- (System/currentTimeMillis) t0) 1000.0)))))
+    (log (format "[ DONE ] Process %s exited with code %d in %,.1f sec" cmd (.waitFor proc) (/ (- (System/currentTimeMillis) t0) 1000.0)))))
 
 (defn parse-command [cmd]
   (condp re-matches cmd
