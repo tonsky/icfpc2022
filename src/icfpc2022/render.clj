@@ -257,7 +257,7 @@
     n))
 
 (def problem
-  "18")
+  "20")
 
 (def snap
   (case problem
@@ -856,7 +856,15 @@
              (ui/gap 10 0)
              [:stretch 1
               (ui/button #(try-rust! problem "rect")
-                (ui/label "rect"))])
+                (ui/label "rect"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (ui/button #(try-rust! problem "x3y2")
+                (ui/label "x3y2"))]
+             (ui/gap 10 0)
+             [:stretch 1
+              (ui/button #(try-rust! problem "x3y3")
+                (ui/label "x3y3"))])
 
            (ui/gap 0 10)
 

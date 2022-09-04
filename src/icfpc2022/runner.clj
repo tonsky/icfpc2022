@@ -27,7 +27,7 @@
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (def algos
-  [:xcut :ycut :rect])
+  [#_:xcut #_:ycut #_:rect :x3y2 :x3y3])
 
 (defonce ^ExecutorService executor
   (Executors/newFixedThreadPool (.availableProcessors (Runtime/getRuntime))))
@@ -98,7 +98,7 @@
 (defn run-all! []
   (core/run! {} ["cargo" "build" "--release"])
   (doseq [[problem algo] (shuffle
-                           (for [problem problems
+                           (for [problem core/problems
                                  algo    algos]
                              [problem algo]))]
     (.submit executor ^Runnable #(run-problem! problem algo))))
