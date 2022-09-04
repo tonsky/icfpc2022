@@ -5,6 +5,7 @@
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
+    [icfpc2022.algo.merge :as algo.merge]
     [icfpc2022.algo.rect :as algo.rect]
     [icfpc2022.algo.swap :as algo.swap]
     [icfpc2022.algo.ycut :as algo.ycut]
@@ -144,13 +145,6 @@
         
         [x' y']))))
 
-(defn block-at [picture [x y]]
-  (reduce-kv 
-    (fn [acc id block]
-      (when (core/inside? (:rect block) [x y])
-        (reduced id)))
-    nil picture))
-
 (defn event [ctx event]
   (hui/eager-or
     (when (= :mouse-move (:event event))
@@ -168,7 +162,7 @@
             (:pressed? event))
       (when-some [[x y] (coords ctx event)]
         (let [tool @*tool
-              id   (block-at @*picture [x y])]
+              id   (core/block-at @*picture [x y])]
           (when-some [op (case (first tool)
                            :pcut
                            [:pcut id [x y]]
@@ -407,7 +401,7 @@
                    (ui/dynamic _ [tool @*tool]
                      (if (= :color (first tool))
                        (ui/button
-                         #(:nop)
+                         (fn [] :nop)
                          {:bg 0xFFFED7B2}
                          (let [[_ r g b] tool]
                            (ui/rect (paint/fill (Color/makeARGB 255 r g b))
@@ -447,6 +441,13 @@
                  (ui/width btn-width
                    (ui/button #(try-clj! (algo.swap/swap problem 50 1000))
                      (ui/label "Swap"))))
+               
+               (ui/gap 0 10)
+               (ui/row
+                 (ui/width btn-width
+                   (ui/button #(try-clj! (algo.merge/merge (:problem/picture problem)))
+                     (ui/label "Merge")))
+                 (ui/gap 10 0))
            
                (ui/gap 0 20)
            

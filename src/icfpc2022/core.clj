@@ -141,6 +141,13 @@
      :problem/bytes   (image-bytes image)
      :problem/picture picture}))
 
+(defn block-at [picture [x y]]
+  (reduce-kv 
+    (fn [acc id block]
+      (when (inside? (:rect block) [x y])
+        (reduced id)))
+    nil picture))
+
 (defn get-color [^bytes bytes x y]
   (let [idx (* 4 (+ x (* 400 (- 399 y))))
         r   (byte->long (aget bytes (+ idx 0)))

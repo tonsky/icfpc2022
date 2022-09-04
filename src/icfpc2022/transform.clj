@@ -136,9 +136,7 @@
       [l1 b1 r2 t1]
       ; rect2 rect1
       (and (= r2 l1) (= b1 b2) (= t1 t2))
-      [l2 b1 r1 t1]
-      :else
-      (throw (ex-info (str "Can’t merge " rect1 " and " rect2) {:rect1 rect1 :rect2 rect2})))))
+      [l2 b1 r1 t1])))
 
 (defn list-simple-blocks [block]
   (if (instance? SimpleBlock block)
@@ -162,7 +160,8 @@
         rect1  (:rect block1)
         block2 (picture id2)
         rect2  (:rect block2)
-        rect'  (merge-rects rect1 rect2)
+        rect'  (or (merge-rects rect1 rect2)
+                 (throw (ex-info (str "Can’t merge " id1 " (" rect1 ") and " id2 " (" rect2 ")") {:rect1 rect1 :rect2 rect2})))
         merged (if (and
                      (instance? SimpleBlock block1)
                      (instance? SimpleBlock block2)
