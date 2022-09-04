@@ -257,7 +257,7 @@
     n))
 
 (def problem
-  "20")
+  "7")
 
 (def snap
   (case problem

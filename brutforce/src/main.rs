@@ -180,7 +180,7 @@ struct Point {
     y: Coord
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Color {
     r: u8,
     g: u8,
@@ -549,6 +549,36 @@ impl Problem {
         };
     }
 
+    fn most_frequent_color(&self, left: Coord, bottom: Coord, right: Coord, top: Coord) -> Color {
+        let step = 5;
+        let mut map = FxHashMap::default();
+
+        for x in (left..right).step_by(step as usize) {
+            for y in (bottom..top).step_by(step as usize) {
+                let p = Point { x: x as Coord, y: y as Coord };
+                let c = self.get_color(p).unwrap();
+                *map.entry(c).or_default() += 1;
+            }
+        }
+
+        let mut res_count = 0;
+        let mut res_color = Color::WHITE;
+
+        for (c, count) in map.into_iter() {
+            if count > res_count {
+                res_count = count;
+                res_color = c;
+            }
+        }
+
+        return res_color;
+    }
+
+    fn color(&self, left: Coord, bottom: Coord, right: Coord, top: Coord) -> Color {
+        // return self.average_color(left, bottom, right, top);
+        return self.most_frequent_color(left, bottom, right, top);
+    }
+
     fn similarity(&self, picture: &Picture) -> Result<u64, String> {
         let mut result = 0f64;
         for x in 0..self.image.width() {
@@ -582,16 +612,16 @@ fn try_logs(logs: Vec<Log>, problem: &Problem) {
 }
 
 fn algo_xcut(problem: &Problem) -> Vec<Log> {
-    let step = 20;
+    let step = 10;
     return (step..(400 - 3 * step)).step_by(step).flat_map(|x1| {
         ((x1+step)..(400 - 2 * step)).step_by(step).flat_map(move |x2| {
             ((x2+step)..(400 - 1 * step)).step_by(step).flat_map(move |x3| {
                 ((x3+step)..(400 - 0 * step)).step_by(step).map(move |x4| {
-                    let c1 = problem.average_color(0, 0, x1 as i32, 400);
-                    let c2 = problem.average_color(x1 as i32, 0, x2 as i32, 400);
-                    let c3 = problem.average_color(x2 as i32, 0, x3 as i32, 400);
-                    let c4 = problem.average_color(x3 as i32, 0, x4 as i32, 400);
-                    let c5 = problem.average_color(x4 as i32, 0, 400, 400);
+                    let c1 = problem.color(0, 0, x1 as i32, 400);
+                    let c2 = problem.color(x1 as i32, 0, x2 as i32, 400);
+                    let c3 = problem.color(x2 as i32, 0, x3 as i32, 400);
+                    let c4 = problem.color(x3 as i32, 0, x4 as i32, 400);
+                    let c5 = problem.color(x4 as i32, 0, 400, 400);
 
                     return vec![Operation::Color { id: "0".to_string(), color: c1 },
                                 Operation::XCut { id: "0".to_string(), x: x1 as i32 },
@@ -609,16 +639,16 @@ fn algo_xcut(problem: &Problem) -> Vec<Log> {
 }
 
 fn algo_ycut(problem: &Problem) -> Vec<Log> {
-    let step = 20;
+    let step = 10;
     return (step..(400 - 3 * step)).step_by(step).flat_map(|y1| {
         ((y1+step)..(400 - 2 * step)).step_by(step).flat_map(move |y2| {
             ((y2+step)..(400 - 1 * step)).step_by(step).flat_map(move |y3| {
                 ((y3+step)..(400 - 0 * step)).step_by(step).map(move |y4| {
-                    let c1 = problem.average_color(0, 0, 400, y1 as i32);
-                    let c2 = problem.average_color(0, y1 as i32, 400, y2 as i32);
-                    let c3 = problem.average_color(0, y2 as i32, 400, y3 as i32);
-                    let c4 = problem.average_color(0, y3 as i32, 400, y4 as i32);
-                    let c5 = problem.average_color(0, y4 as i32, 400, 400);
+                    let c1 = problem.color(0, 0, 400, y1 as i32);
+                    let c2 = problem.color(0, y1 as i32, 400, y2 as i32);
+                    let c3 = problem.color(0, y2 as i32, 400, y3 as i32);
+                    let c4 = problem.color(0, y3 as i32, 400, y4 as i32);
+                    let c5 = problem.color(0, y4 as i32, 400, 400);
 
                     return vec![Operation::Color { id: "0".to_string(), color: c1 },
                                 Operation::YCut { id: "0".to_string(), y: y1 as i32 },
@@ -636,18 +666,18 @@ fn algo_ycut(problem: &Problem) -> Vec<Log> {
 }
 
 fn algo_rect(problem: &Problem) -> Vec<Log> {
-    let step = 20;
+    let step = 16;
     return (step..(400 - step)).step_by(step).flat_map(|l| {
         ((l+step)..400).step_by(step).flat_map(move |r| {
             (step..(400 - step)).step_by(step).flat_map(move |b| {
                 ((b+step)..400).step_by(step).map(move |t| {
-                    let c00  = problem.average_color(0, 0, l as i32, b as i32);
-                    let c01  = problem.average_color(l as i32, 0, 400, b as i32);
-                    let c020 = problem.average_color(l as i32, b as i32, r as i32, t as i32);
-                    let c021 = problem.average_color(r as i32, b as i32, 400, t as i32);
-                    let c022 = problem.average_color(r as i32, t as i32, 400, 400);
-                    let c023 = problem.average_color(l as i32, t as i32, r as i32, 400);
-                    let c03  = problem.average_color(0, b as i32, l as i32, 400);
+                    let c00  = problem.color(0, 0, l as i32, b as i32);
+                    let c01  = problem.color(l as i32, 0, 400, b as i32);
+                    let c020 = problem.color(l as i32, b as i32, r as i32, t as i32);
+                    let c021 = problem.color(r as i32, b as i32, 400, t as i32);
+                    let c022 = problem.color(r as i32, t as i32, 400, 400);
+                    let c023 = problem.color(l as i32, t as i32, r as i32, 400);
+                    let c03  = problem.color(0, b as i32, l as i32, 400);
 
                     return vec![Operation::Color { id: "0".to_string(), color: c00 },
                                 Operation::PCut { id: "0".to_string(), point: Point { x: l as i32, y: b as i32 }},
@@ -671,12 +701,12 @@ fn algo_x3y2(problem: &Problem) -> Vec<Log> {
             (step..400).step_by(step).flat_map(move |y1| {
                 (step..400).step_by(step).flat_map(move |y2| {
                     (step..400).step_by(step).map(move |y3| {
-                        let c000  = problem.average_color(0, 0, x1 as i32, y1 as i32);
-                        let c001  = problem.average_color(0, y1 as i32, x1 as i32, 400);
-                        let c0100 = problem.average_color(x1 as i32, 0, x2 as i32, y2 as i32);
-                        let c0101 = problem.average_color(x1 as i32, y2 as i32, x2 as i32, 400);
-                        let c0110 = problem.average_color(x2 as i32, 0, 400, y3 as i32);
-                        let c0111 = problem.average_color(x2 as i32, y3 as i32, 400, 400);
+                        let c000  = problem.color(0, 0, x1 as i32, y1 as i32);
+                        let c001  = problem.color(0, y1 as i32, x1 as i32, 400);
+                        let c0100 = problem.color(x1 as i32, 0, x2 as i32, y2 as i32);
+                        let c0101 = problem.color(x1 as i32, y2 as i32, x2 as i32, 400);
+                        let c0110 = problem.color(x2 as i32, 0, 400, y3 as i32);
+                        let c0111 = problem.color(x2 as i32, y3 as i32, 400, 400);
                         
                         return vec![Operation::Color { id: "0".to_string(), color: c000 },
                                     Operation::XCut  { id: "0".to_string(), x: x1 as i32},
@@ -707,17 +737,17 @@ fn algo_x3y3(problem: &Problem) -> Vec<Log> {
                             (step..(400 - step)).step_by(step).flat_map(move |y5| {
                                 ((y5 + step)..400).step_by(step).map(move |y6| {
 
-                                    let c000   = problem.average_color(0, 0, x1 as i32, y1 as i32);
-                                    let c0010  = problem.average_color(0, y1 as i32, x1 as i32, y2 as i32);
-                                    let c0011  = problem.average_color(0, y2 as i32, x1 as i32, 400);
+                                    let c000   = problem.color(0, 0, x1 as i32, y1 as i32);
+                                    let c0010  = problem.color(0, y1 as i32, x1 as i32, y2 as i32);
+                                    let c0011  = problem.color(0, y2 as i32, x1 as i32, 400);
 
-                                    let c0100  = problem.average_color(x1 as i32, 0, x2 as i32, y1 as i32);
-                                    let c01010 = problem.average_color(x1 as i32, y1 as i32, x2 as i32, y2 as i32);
-                                    let c01011 = problem.average_color(x1 as i32, y2 as i32, x2 as i32, 400);
+                                    let c0100  = problem.color(x1 as i32, 0, x2 as i32, y1 as i32);
+                                    let c01010 = problem.color(x1 as i32, y1 as i32, x2 as i32, y2 as i32);
+                                    let c01011 = problem.color(x1 as i32, y2 as i32, x2 as i32, 400);
 
-                                    let c0110  = problem.average_color(x2 as i32, 0, 400, y1 as i32);
-                                    let c01110 = problem.average_color(x2 as i32, y1 as i32, 400, y2 as i32);
-                                    let c01111 = problem.average_color(x2 as i32, y2 as i32, 400, 400);
+                                    let c0110  = problem.color(x2 as i32, 0, 400, y1 as i32);
+                                    let c01110 = problem.color(x2 as i32, y1 as i32, 400, y2 as i32);
+                                    let c01111 = problem.color(x2 as i32, y2 as i32, 400, 400);
                         
                                     return vec![
                                         Operation::Color { id: "0".to_string(), color: c000 },
@@ -750,7 +780,6 @@ fn algo_x3y3(problem: &Problem) -> Vec<Log> {
         })
     }).collect();
 }
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
