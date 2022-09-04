@@ -1,11 +1,24 @@
 #![allow(dead_code)]
 #![allow(irrefutable_let_patterns)]
+
 extern crate core;
 
+use std::collections::HashMap;
 use std::env;
+use std::fmt::format;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+
 use fxhash::FxHashMap;
-use image::io::Reader as ImageReader;
 use image::{Rgba, RgbaImage};
+use image::io::Reader as ImageReader;
+use serde_json::Deserializer;
+
+use crate::Operation::Color;
+use crate::transport::PictureData;
+
+mod transport;
 
 type BlockId = String;
 type Coord = i32;
@@ -302,7 +315,7 @@ impl Operation {
 
 type Log = Vec<Operation>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Picture {
     counter: u32,
     width: Coord,
@@ -310,16 +323,41 @@ pub struct Picture {
     blocks: FxHashMap<BlockId, Block>
 }
 
-
 impl Picture {
-    fn initial() -> Self {
+    fn initial(width: Coord, height: Coord) -> Self {
         let mut blocks = FxHashMap::default();
-        blocks.insert("0".to_string(), Block::Simple { shape: Shape::square(400), color: Color::WHITE });
+        blocks.insert("0".to_string(), Block::Simple { shape: Shape::Rect {
+            l: 0,
+            b: 0,
+            r: width,
+            t: height
+        }, color: Color::WHITE });
         return Picture {
             counter: 0,
-            width: 400,
-            height: 400,
+            width,
+            height,
             blocks: blocks
+        }
+    }
+
+    fn from_data(data: &PictureData) -> Self {
+        let blocks: FxHashMap<BlockId, Block> = data.blocks.iter().map(|block| {
+            let color = {
+                let (r, g, b, a) = block.color;
+                Color { r, g, b, a }
+            };
+            let (l, b) = block.bottom_left;
+            let (r, t) = block.top_right;
+            (block.block_id.clone(), Block::Simple {
+                shape: Shape::Rect { l, b, r, t },
+                color
+            })
+        }).collect();
+        Picture {
+            counter: 0,
+            width: data.width,
+            height: data.height,
+            blocks
         }
     }
 
@@ -508,16 +546,29 @@ impl Picture {
 }
 
 struct Problem {
-    image: RgbaImage
+    image: RgbaImage,
+    initial: Picture,
 }
 
 impl Problem {
     fn load(problem_id: i32) -> Result<Problem, Error> {
         let reader = ImageReader::open(format!("../resources/{}.png", problem_id)).map_err(|err| err.to_string())?;
         let img = reader.decode().map_err(|err| err.to_string())?;
-        assert!(img.height() == 400 && img.width() == 400);
+
+        let path_str = format!("../{}.initial.json", problem_id);
+        let initial_pic_path = Path::new(&path_str);
+        let initial_pic = if initial_pic_path.exists() {
+            let f = File::open(initial_pic_path).map_err(|err| err.to_string())?;
+            let mut reader = BufReader::new(f);
+            let picture_data: PictureData = serde_json::from_reader(reader)?;
+            Picture::from_data(&picture_data)
+        } else {
+            Picture::initial(img.width() as Coord,
+                             img.height() as Coord)
+        };
         Ok(Problem {
-            image: img.to_rgba8()
+            image: img.to_rgba8(),
+            initial: initial_pic
         })
     }
 
@@ -594,7 +645,7 @@ impl Problem {
 fn try_logs(logs: Vec<Log>, problem: &Problem) {
     let mut best_score = None;
     for log in &logs {
-        let mut picture = Picture::initial();
+        let mut picture = problem.initial.clone();
         let mut cost = 0;
         log.iter().for_each(|op| {
             cost += picture.cost(op.clone()).unwrap();
