@@ -6,10 +6,10 @@
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
-    [icfpc2022.runner :as runner]
+    [icfpc2022.core :as core]
     [io.github.humbleui.app :as app]
     [io.github.humbleui.canvas :as canvas]
-    [io.github.humbleui.core :as core]
+    [io.github.humbleui.core :as hui]
     [io.github.humbleui.paint :as paint]
     [io.github.humbleui.protocols :as protocols]
     [io.github.humbleui.window :as window]
@@ -266,14 +266,17 @@
     5))
 
 (defonce ^Image original-image
-  (Image/makeFromEncoded (core/slurp-bytes (str "resources/" problem ".png"))))
+  (Image/makeFromEncoded (hui/slurp-bytes (str "resources/" problem ".png"))))
+
+(defn image-bytes [^Image image]
+  (with-open [bitmap (Bitmap.)]
+    (let [image-info (ImageInfo. 400 400 ColorType/RGBA_8888 ColorAlphaType/OPAQUE (ColorSpace/getSRGB))]
+      (.allocPixels bitmap image-info)
+      (.readPixels image bitmap)
+      (.readPixels bitmap))))
 
 (defonce ^Bitmap original-bytes
-  (let [bitmap     (Bitmap.)
-        image-info (ImageInfo. 400 400 ColorType/RGBA_8888 ColorAlphaType/OPAQUE (ColorSpace/getSRGB))]
-    (.allocPixels bitmap image-info)
-    (.readPixels original-image bitmap)
-    (.readPixels bitmap)))
+  (image-bytes original-image))
 
 (defn get-color [^bytes bytes x y]
   (let [idx (* 4 (+ x (* 400 (- 399 y))))
@@ -320,7 +323,7 @@
     id))
 
 (defn event [ctx event]
-  (core/eager-or
+  (hui/eager-or
     (when (= :mouse-move (:event event))
       (reset! *coord (coords ctx event))
       (when @*coord
@@ -463,19 +466,10 @@
 (defn score
   ([]
    (score @*log original-bytes Long/MAX_VALUE))
+  ([log original-bytes]
+   (score log original-bytes Long/MAX_VALUE))
   ([log original-bytes limit]
    (let [picture   (reduce transform start-picture log)]
-     #_(let [get-color (fn [x y]
-                         (reduce-kv
-                           (fn [color id block]
-                             (if (inside? (:shape block) [x y])
-                               (reduced (:color block))
-                               color))
-                           [255 255 255 255]
-                           (:blocks picture)))
-             sim  (similarity original-bytes get-color [0 0 400 400] limit)
-             cost (cost log)]
-         (+ cost sim))
      (with-open [bitmap (render-to-bitmap picture)]
        (let [pixels (.readPixels bitmap)
              sim    (similarity original-bytes pixels limit)
@@ -525,18 +519,21 @@
         (let [[_ id1 id2] op]
           (format "merge [%s] [%s]" id1 id2))))))
 
-(defn dump []
-  (println "--- begin ---")
-  (let [solution (solution @*log)
-        score    (score)
-        file     (str "answers/problem " problem "/" score)]
-    (println solution)
-    (println "--- end ---")
-    (println "Score:" score)
-    (println "File:" file)
-    (.mkdirs (io/file (str "answers/problem " problem)))
-    (spit file solution)
-    file))
+(defn dump
+  ([]
+   (dump problem original-bytes @*log))
+  ([problem image-bytes log]
+    (core/log "--- begin ---")
+    (let [solution (solution log)
+          score    (score log image-bytes)
+          file     (str "answers/problem " problem "/" score)]
+      (core/log solution)
+      (core/log "--- end ---")
+      (core/log "Score:" score)
+      (core/log "File:" file)
+      (.mkdirs (io/file (str "answers/problem " problem)))
+      (spit file solution)
+      file)))
 
 (defn tool [tool label]
   (ui/dynamic _ [selected? (= tool @*tool)]
@@ -545,24 +542,24 @@
       {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
       label)))
 
-(core/deftype+ Stack [children ^:mut my-rect]
+(hui/deftype+ Stack [children ^:mut my-rect]
   protocols/IComponent
   (-measure [_ ctx cs]
     (reduce
       (fn [size child]
-        (let [{:keys [width height]} (core/measure child ctx cs)]
+        (let [{:keys [width height]} (hui/measure child ctx cs)]
           (IPoint. (max (:width size) width) (max (:height size) height))))
       (IPoint. 0 0) children))
   
   (-draw [_ ctx ^IRect rect ^Canvas canvas]
     (set! my-rect rect)
     (doseq [child children]
-      (core/draw-child child ctx rect canvas)))
+      (hui/draw-child child ctx rect canvas)))
   
   (-event [_ ctx event]
-    (reduce core/eager-or false
+    (reduce hui/eager-or false
       (for [child children]
-        (core/event-child child ctx event))))
+        (hui/event-child child ctx event))))
   
   (-iterate [this ctx cb]
     (or
@@ -608,42 +605,16 @@
         (reset! *status (.getMessage t))
         (.printStackTrace t)))))
 
-(defn parse-command [cmd]
-  (condp re-matches cmd
-    #"cut \[([0-9.]+)\] \[(\d+), (\d+)\]"
-    :>> (fn [[_ id x y]]
-          [:pcut id [(parse-long x) (parse-long y)]])
-    
-    #"cut \[([0-9.]+)\] \[[xX]\] \[(\d+)\]"
-    :>> (fn [[_ id x]]
-          [:xcut id (parse-long x)])
-    
-    #"cut \[([0-9.]+)\] \[[yY]\] \[(\d+)\]"
-    :>> (fn [[_ id y]]
-          [:ycut id (parse-long y)])
-    
-    #"color \[([0-9.]+)\] \[(\d+), (\d+), (\d+), (\d+)\]"
-    :>> (fn [[_ id r g b a]]
-          [:color id [(parse-long r) (parse-long g) (parse-long b) (parse-long a)]])
-    
-    #"swap \[([0-9.]+)\] \[([0-9.]+)\]"
-    :>> (fn [[_ id1 id2]]
-          [:swap id1 id2])
-    
-    #"merge \[([0-9.]+)\] \[([0-9.]+)\]"
-    :>> (fn [[_ id1 id2]]
-          [:swap id1 id2])))
-
 (defn try-rust! [problem algo & args]
   (future
     (try
       (reset! *status "Thinking in Rust...")
       (let [t0 (System/currentTimeMillis)]
-        (runner/run!
+        (core/run!
           {:on-output
            (fn [line]
              (let [[score & log] (str/split line #"\|")
-                   log     (mapv parse-command log)
+                   log     (mapv core/parse-command log)
                    picture (reduce transform start-picture log)]
                (reset! *log log)
                (reset! *picture picture)
@@ -657,10 +628,10 @@
         (redraw)
         (.printStackTrace t)))))  
 
-(defn submit [problem solution]
+(defn submit [problem file]
   (let [resp (http/post (str "https://robovinci.xyz/api/submissions/" problem "/create")
                {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
-                :multipart [{:name "file" :content (io/file solution)}]})]
+                :multipart [{:name "file" :content (io/file file)}]})]
     (reset! *status (format "Sent! %d %s" (:status resp) (:body resp)))))
 
 (defn average [colors]
@@ -788,7 +759,9 @@
           (with-open [bitmap (render-to-bitmap picture)]
             (let [pixels (.readPixels bitmap)
                   sim    (similarity original-bytes pixels)
-                  cost   (cost log)]
+                  cost   (cost log)
+                  score  (+ sim cost)
+                  saved  (or (core/saved-score problem) 0)]
               (ui/column
                 (ui/width 400
                   (ui/height 400
@@ -802,14 +775,18 @@
                 (ui/gap 0 10)
                 (ui/row
                   (ui/column
-                    (ui/label "Total Score:")
+                    (ui/label "Saved Score:")
+                    (ui/gap 0 10)
+                    (ui/label "This Score:")
                     (ui/gap 0 10)
                     (ui/label "Similarity:")
                     (ui/gap 0 10)
                     (ui/label "Cost:"))
                   (ui/gap 10 0)
                   (ui/column
-                    (ui/label (+ sim cost))
+                    (ui/label saved)
+                    (ui/gap 0 10)
+                    (ui/label (str score (if (< score saved) " 🔥" "")))
                     (ui/gap 0 10)
                     (ui/label sim)
                     (ui/gap 0 10)

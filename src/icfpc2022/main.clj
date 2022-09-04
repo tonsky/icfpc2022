@@ -1,7 +1,6 @@
 (ns icfpc2022.main
   (:require
     [clojure.string :as str]
-    [icfpc2022.render :as render]
     [io.github.humbleui.app :as app]
     [io.github.humbleui.canvas :as canvas]
     [io.github.humbleui.core :as core]
@@ -17,7 +16,10 @@
 
 (defonce *window
   (atom nil))
-                     
+
+(defonce **app
+  (atom nil))
+
 (defn ctx [window]
   (when-not (window/closed? window)
     {:window window
@@ -26,10 +28,10 @@
 (defn on-paint [window canvas]
   (canvas/clear canvas 0xFFF6F6F6)
   (let [bounds (window/content-rect window)]
-    (core/draw @#'render/app (ctx window) (IRect/makeXYWH 0 0 (:width bounds) (:height bounds)) canvas)))
+    (core/draw @@**app (ctx window) (IRect/makeXYWH 0 0 (:width bounds) (:height bounds)) canvas)))
 
 (defn on-event [window event]
-  (when-let [result (core/event @#'render/app (ctx window) event)]
+  (when-let [result (core/event @@**app (ctx window) event)]
     (window/request-frame window)
     result))
 
@@ -37,8 +39,8 @@
   (let [screen  (first (app/screens))
         scale   (:scale screen)
         area    (:work-area screen)
-        width   (* (:width area) 0.75)
-        height  (* (:height area) 0.75)
+        width   (* (:width area) 0.95)
+        height  (* (:height area) 0.95)
         x       (+ (:x area) (/ (- (:width area) width) 2))
         y       (+ (:y area) (/ (- (:height area) height) 2))
         window  (window/make
@@ -54,11 +56,10 @@
     (window/set-window-position window x y)
     (window/set-visible window true)))
 
-(Thread/setDefaultUncaughtExceptionHandler
-  (reify Thread$UncaughtExceptionHandler
-    (uncaughtException [_ thread ex]
-      (.printStackTrace ^Throwable ex))))
-
 (defn -main [& args]
   (future (apply nrepl/-main args))
+  (reset! **app
+    (case (first args)
+      "runner" (requiring-resolve 'icfpc2022.runner/app)
+      (requiring-resolve 'icfpc2022.render/app)))
   (app/start #(reset! *window (make-window))))
