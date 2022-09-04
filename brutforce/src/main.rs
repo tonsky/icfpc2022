@@ -466,9 +466,9 @@ impl Picture {
     }
 
     fn cost(&self, op: Operation) -> Result<u64, Error> {
-        const X_CUT_COST: i32 = 7;
-        const Y_CUT_COST: i32 = 7;
-        const P_CUT_COST: i32 = 10;
+        const X_CUT_COST: i32 = 2;
+        const Y_CUT_COST: i32 = 2;
+        const P_CUT_COST: i32 = 3;
         const COLOR_COST: i32 = 5;
         const SWAP_COST: i32 = 3;
         const MERGE_COST: i32 = 1;
@@ -623,8 +623,8 @@ impl Problem {
     }
 
     fn color(&self, left: Coord, bottom: Coord, right: Coord, top: Coord) -> Color {
-        // return self.average_color(left, bottom, right, top);
-        return self.most_frequent_color(left, bottom, right, top);
+        return self.average_color(left, bottom, right, top);
+        // return self.most_frequent_color(left, bottom, right, top);
     }
 
     fn similarity(&self, picture: &Picture) -> Result<u64, String> {
@@ -853,13 +853,13 @@ fn main() {
 
     let problem = Problem::load(num).unwrap();
     if "xcut" == args[2] {
-        algo_xcut(&problem, 10);
+        algo_xcut(&problem, 25);
     } else if "ycut" == args[2] {
-        algo_ycut(&problem, 10);
+        algo_ycut(&problem, 25);
     } else if "rect" == args[2] {
-        algo_rect(&problem, 16);
+        algo_rect(&problem, 25);
     } else if "x3y2" == args[2] {
-        algo_x3y2(&problem, 40);
+        algo_x3y2(&problem, 50);
     } else if "x3y3" == args[2] {
         algo_x3y3(&problem, 50);
     } else {

@@ -16,6 +16,7 @@
     [io.github.humbleui.skija Bitmap Canvas Color ColorAlphaType ColorSpace ColorType Image ImageInfo]
     [io.github.humbleui.types IPoint IRect]
     [java.io File]
+    [java.lang ProcessBuilder$Redirect]
     [java.util List]))
 
 (set! *warn-on-reflection* true)
