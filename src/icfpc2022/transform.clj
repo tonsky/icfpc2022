@@ -152,8 +152,7 @@
                   (if-some [i (str/index-of k ".")]
                     (subs k 0 i) 
                     k))]
-          (max acc n))
-        0 picture))
+          (max acc n))) 0 picture)
     inc
     str))
 
