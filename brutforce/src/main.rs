@@ -3,9 +3,7 @@
 
 extern crate core;
 
-use std::collections::HashMap;
 use std::env;
-use std::fmt::format;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -13,9 +11,7 @@ use std::path::Path;
 use fxhash::FxHashMap;
 use image::{Rgba, RgbaImage};
 use image::io::Reader as ImageReader;
-use serde_json::Deserializer;
 
-use crate::Operation::Color;
 use crate::transport::PictureData;
 
 mod transport;
@@ -559,8 +555,8 @@ impl Problem {
         let initial_pic_path = Path::new(&path_str);
         let initial_pic = if initial_pic_path.exists() {
             let f = File::open(initial_pic_path).map_err(|err| err.to_string())?;
-            let mut reader = BufReader::new(f);
-            let picture_data: PictureData = serde_json::from_reader(reader)?;
+            let reader = BufReader::new(f);
+            let picture_data: PictureData = serde_json::from_reader(reader).map_err(|err| err.to_string())?;
             Picture::from_data(&picture_data)
         } else {
             Picture::initial(img.width() as Coord,
