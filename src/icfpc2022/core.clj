@@ -208,8 +208,8 @@
           (format "cut [%s] [y] [%d]" id y))
 
         :color
-        (let [[_ id [r g b a]] op]
-          (format "color [%s] [%d, %d, %d, %d]" id r g b a))
+        (let [[_ id [r g b]] op]
+          (format "color [%s] [%d, %d, %d, %d]" id r g b 255))
 
         :swap
         (let [[_ id1 id2] op]

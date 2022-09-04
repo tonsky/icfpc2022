@@ -8,6 +8,39 @@
 
 (set! *unchecked-math* true)
 
+(defn block-similarity [^bytes p1 [r2 g2 b2] [l b r t]]
+  (let [l  (long l)
+        b  (long b)
+        r  (long r)
+        t  (long t)
+        r2 (long r2)
+        g2 (long g2)
+        b2 (long b2)] 
+    (loop [x   l
+           y   (dec t)
+           idx (-> (- 399 y) (* 400) (+ x) (* 4))
+           res 0.0]
+      (cond
+        (< y b)
+        (math/round (* res 0.005))
+       
+        (>= x r)
+        (let [x' l
+              y' (dec y)]
+          (recur x' y' (-> (- 399 y') (* 400) (+ x') (* 4)) res))
+ 
+        :else
+        (let [r1 (core/byte->long (aget p1 idx))
+              g1 (core/byte->long (aget p1 (+ idx 1)))
+              b1 (core/byte->long (aget p1 (+ idx 2)))]
+          (recur (inc x) y (+ idx 4)
+            (+ res
+              (math/sqrt
+                (+
+                  (* (- r1 r2) (- r1 r2))
+                  (* (- g1 g2) (- g1 g2))
+                  (* (- b1 b2) (- b1 b2)))))))))))
+
 (defn similarity
   ([p1 p2]
    (similarity p1 p2 Long/MAX_VALUE))

@@ -6,6 +6,7 @@
     [clojure.math :as math]
     [clojure.string :as str]
     [icfpc2022.algo.rect :as algo.rect]
+    [icfpc2022.algo.swap :as algo.swap]
     [icfpc2022.algo.ycut :as algo.ycut]
     [icfpc2022.core :as core]
     [icfpc2022.score :as score]
@@ -215,6 +216,9 @@
   (paint/fill 0xFFFF8080))
 
 (def stroke-guides
+  (paint/stroke 0xFF804040 2))
+
+(def stroke-cursor
   (paint/stroke 0xFFFF8080 2))
 
 (defn draw-guides [ctx ^Canvas canvas picture]
@@ -227,10 +231,10 @@
 (defn draw-cursor [ctx ^Canvas canvas]
   (let [{:keys [scale]} ctx]
     (when-some [[x y] @*coord]
-      (when (#{:pcut :xcut} (first @*tool))
-        (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) fill-guides))
-      (when (#{:pcut :ycut} (first @*tool))
-        (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) fill-guides)))))
+      (when (not= :ycut (first @*tool))
+        (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) stroke-cursor))
+      (when (not= :xcut (first @*tool))
+        (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) stroke-cursor)))))
 
 (defn tool [tool label]
   (ui/dynamic _ [selected? (= tool @*tool)]
@@ -239,21 +243,23 @@
       {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
       label)))
 
-(defn try-logs! [logs]
+(defn try-clj! [logs]
   (when-not (str/starts-with? @*status "⏳")
     (reset! *status "⏳")
     (future
       (try
         (let [problem     @*problem
               t0          (System/currentTimeMillis)
-              *best-score (volatile! Long/MAX_VALUE)]
+              *best-score (volatile! Long/MAX_VALUE)
+              *iter       (volatile! 0)]
           (doseq [log logs]
             (let [picture         (transform/transform-all (:problem/picture problem) log)
                   {:keys [score]} (score/score problem log @*best-score)]
               (when (< score @*best-score)
                 (vreset! *best-score score)
-                (reset! *log log)
-                (reset! *status (format "⏳ %,.1f sec" (/ (- (System/currentTimeMillis) t0) 1000.0))))))
+                (reset! *log log))
+              (reset! *status (format "⏳ %,.1f sec, iter %d" (/ (- (System/currentTimeMillis) t0) 1000.0) @*iter))
+              (vswap! *iter inc)))
           (reset! *status (format "✅ %,.1f s" (/ (- (System/currentTimeMillis) t0) 1000.0))))
         (catch Throwable t
           (reset! *status (str "☠️ " (.getMessage t)))
@@ -295,7 +301,13 @@
             (ui/column
               (ui/width 400
                 (ui/height 400
-                  (ui/->AnImage (:problem/image problem))))
+                  (core/stack
+                    (ui/->AnImage (:problem/image problem))
+                    (ui/dynamic _ [picture @*picture]
+                      (ui/canvas {:on-paint (fn [ctx canvas size]
+                                              (when @*guides?
+                                                (draw-guides ctx canvas picture))
+                                              (draw-cursor ctx canvas))})))))
               (ui/gap 0 20)
               (ui/row
                 (ui/valign 0.5
@@ -324,7 +336,7 @@
             (ui/dynamic _ [picture @*picture
                            image   @*image
                            {:keys [cost similarity score]} @*score
-                           saved (or (core/saved-score (:problem/id problem)) 0)]
+                           saved (or (core/saved-score (:problem/id problem)) 1000000000)]
               (ui/column
                 (ui/width 400
                   (ui/height 400
@@ -425,12 +437,16 @@
                (ui/gap 0 10)
                (ui/row
                  (ui/width btn-width
-                   (ui/button #(try-logs! (algo.ycut/ycut (:problem/bytes problem)))
+                   (ui/button #(try-clj! (algo.ycut/ycut (:problem/bytes problem)))
                      (ui/label "YCut")))
                  (ui/gap 10 0)
                  (ui/width btn-width
-                   (ui/button #(try-logs! (algo.rect/rect (:problem/bytes problem)))
-                     (ui/label "Rect"))))
+                   (ui/button #(try-clj! (algo.rect/rect (:problem/bytes problem)))
+                     (ui/label "Rect")))
+                 (ui/gap 10 0)
+                 (ui/width btn-width
+                   (ui/button #(try-clj! (algo.swap/swap problem 50 1000))
+                     (ui/label "Swap"))))
            
                (ui/gap 0 20)
            
@@ -472,7 +488,7 @@
                             id   (:problem/id problem)
                             file (core/save id @*log score)
                             resp (core/submit id file)]
-                        (reset! *status (format "Sent! %d %s" (:status resp) (:body resp))))
+                        (reset! *status (format "💌 Sent! %d %s" (:status resp) (:body resp))))
                      {:bg 0xFFB2FEB2}
                      (ui/label "Submit")))
                  (ui/gap 10 0)

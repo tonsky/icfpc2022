@@ -72,7 +72,8 @@
 
 (defmethod transform :color [picture [_ id color]]
   (assert (contains? picture id) (str ":color No block " id))
-  (update picture id assoc :color color))
+  (let [block (picture id)]
+    (assoc picture id (SimpleBlock. (:rect block) color))))
 
 (defmethod transform :pcut [picture [_ id [x y] :as cmd]]
   (assert (contains? picture id) (str ":pcut No block " id))
