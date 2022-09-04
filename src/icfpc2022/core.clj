@@ -115,10 +115,12 @@
   (let [json (json/parse-string file true)]
     (into {}
       (for [block (:blocks json)
-            :let [{:keys [blockId bottomLeft topRight color]} block
+            :let [{:keys [blockId bottomLeft topRight color pngBottomLeftPoint]} block
                   [l b] bottomLeft
                   [r t] topRight
-                  [red green blue] color]]
+                  [red green blue] (if color
+                                     color
+                                     [255 0 0])]]
         [blockId (SimpleBlock. [l b r t] [red green blue])]))))
 
 (defn image-bytes [^Image image]
