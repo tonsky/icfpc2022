@@ -47,7 +47,7 @@
   (atom
     (into {}
       (for [id    core/problems
-            :when (<= id 25)
+            ; :when (<= 36 id 40)
             :let  [problem     (core/load-problem id)
                    saved-score (core/saved-score id)]]
         [id {:problem problem
@@ -179,7 +179,7 @@
      :hui.text-field/padding-right  5}
     (ui/with-bounds ::bounds
       (ui/dynamic ctx [problems  (sort-by first @*problems)
-                       partition (quot (:height (::bounds ctx)) (+ image-size padding padding 10))]
+                       partition (quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
         (ui/padding 20
           (ui/row
             (interpose (ui/gap big-padding 0)
@@ -231,15 +231,13 @@
             (ui/column
               (ui/button run-all! (ui/label "RUN"))
               (ui/gap 0 (* 2 padding))
-              (ui/label (str "Saved: "
-                          (reduce + 0
+              (let [saved (reduce + 0
                             (for [[problem info] problems]
-                              (:score (:saved info))))))
-              (ui/gap 0 (* 2 padding))
-              (ui/label (str "Total: "
-                          (reduce + 0
+                              (:score (:saved info))))
+                    total (reduce + 0
                             (for [[problem info] problems]
-                              (->> (vals info) (keep :score) (reduce min Integer/MAX_VALUE))))))
+                              (->> (vals info) (keep :score) (reduce min Integer/MAX_VALUE))))]
+                (ui/label (format "Delta: %,d" (- total saved))))
               [:stretch 1 nil])
             ))))))
           

@@ -450,7 +450,7 @@
                (ui/gap 0 10)
                (ui/row
                  (ui/width btn-width
-                   (ui/button #(try-clj! (algo.grid/logs problem 10 10 1000))
+                   (ui/button #(try-clj! (algo.grid/logs problem 10 10 100))
                      (ui/label "Grid")))
                  (ui/gap 10 0)
                  (ui/width btn-width
@@ -553,3 +553,16 @@
 
 
 (redraw)
+
+(comment
+  (doseq [id (range 36 41)]
+    (let [i1 (Image/makeFromEncoded (hui/slurp-bytes (str "resources/" id ".png")))
+          i2 (Image/makeFromEncoded (hui/slurp-bytes (str "resources/" id ".initial.png")))
+          b1 (core/image-bytes i1)
+          b2 (core/image-bytes i2)
+          sim (score/similarity b1 b2)
+          dir (io/file (str "answers/problem " id))]
+      (println id sim)
+      (.mkdirs dir)
+      (spit (io/file dir (str sim)) "")))
+  )

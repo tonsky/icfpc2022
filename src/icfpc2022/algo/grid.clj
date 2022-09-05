@@ -25,12 +25,12 @@
             (recur (conj res x))
             (recur res)))))))
 
-(defn log [bytes ylen xlen xcut ycut]
+(defn log [bytes root-id ylen xlen xcut ycut]
   (let [ys (gen-rand (dec ylen))
         xs (repeatedly ylen #(gen-rand (dec xlen)))]
     (vec
       (for [[i yprev y] (map vector (range) (cons 0 ys) ys)
-            :let [yid   (str/join "." (cons "0" (repeat i "1")))]
+            :let [yid   (str/join "." (cons root-id (repeat i "1")))]
             op (concat
                  (when (< y 400)
                    [[ycut yid y]])
@@ -54,5 +54,14 @@
         op))))
 
 (defn logs [problem ylen xlen iters]
-  (repeatedly iters
-    #(log (:problem/bytes problem) ylen xlen :xcut :ycut)))
+  (let [{:problem/keys [picture]} problem
+        [merge-log] (if (> (count picture) 1)
+                      (algo.merge/merge picture)
+                      [])
+        picture     (transform/transform-all picture merge-log)
+        _           (assert (= 1 (count picture)) (str "Expected 1 root block, got " (count picture)))
+        id          (first (keys picture))]
+    (repeatedly iters
+      #(concat
+         merge-log
+         (log (:problem/bytes problem) id ylen xlen :xcut :ycut)))))
