@@ -8,9 +8,7 @@
     [icfpc2022.algo.grid :as algo.grid]
     [icfpc2022.algo.merge :as algo.merge]
     [icfpc2022.algo.paint :as algo.paint]
-    [icfpc2022.algo.rect :as algo.rect]
-    [icfpc2022.algo.swap :as algo.swap]
-    [icfpc2022.algo.ycut :as algo.ycut]
+    [icfpc2022.algo.rects :as algo.rects]
     [icfpc2022.core :as core]
     [icfpc2022.score :as score]
     [icfpc2022.transform :as transform]
@@ -291,7 +289,7 @@
       {:bg (if selected? 0xFFFED7B2 0xFFB2D7FE)}
       label)))
 
-(defn try-clj! [logs]
+(defn try-clj! [logs-fn]
   (when-not (str/starts-with? @*status "⏳")
     (reset! *status "⏳")
     (future
@@ -300,7 +298,7 @@
               t0          (System/currentTimeMillis)
               *best-score (volatile! Long/MAX_VALUE)
               *iter       (volatile! 0)]
-          (doseq [log logs]
+          (doseq [log (logs-fn)]
             (let [log             (vec log)
                   picture         (transform/transform-all (:problem/picture problem) log)
                   {:keys [score]} (score/score problem log @*best-score)]
@@ -491,31 +489,16 @@
                (ui/gap 0 10)
                (ui/row
                  (ui/width btn-width
-                   (ui/button #(try-clj! (algo.ycut/ycut (:problem/bytes problem)))
-                     (ui/label "YCut")))
-                 (ui/gap 10 0)
-                 (ui/width btn-width
-                   (ui/button #(try-clj! (algo.rect/rect (:problem/bytes problem)))
-                     (ui/label "Rect")))
-                 (ui/gap 10 0)
-                 (ui/width btn-width
-                   (ui/button #(try-clj! (algo.swap/swap problem 50 1000))
-                     (ui/label "Swap"))))
-               
-               (ui/gap 0 10)
-               (ui/row
-                 (ui/width btn-width
-                   (ui/button #(try-clj! (algo.grid/logs problem 10 10 100))
+                   (ui/button (fn [] (try-clj! #(algo.grid/logs problem 10 10 100)))
                      (ui/label "Grid")))
                  (ui/gap 10 0)
                  (ui/width btn-width
-                   (ui/button #(try-clj! (algo.merge/merge (:problem/picture problem)))
-                     (ui/label "Merge")))
+                   (ui/button (fn [] (try-clj! #(algo.rects/rects problem 1000 100)))
+                     (ui/label "Rects")))
                  (ui/gap 10 0)
                  (ui/width btn-width
-                   (ui/button #(try-clj! (algo.paint/paint problem))
-                     (ui/label "Paint")))
-                 (ui/gap 10 0))
+                   (ui/button (fn [] (try-clj! #(algo.merge/merge (:problem/picture problem))))
+                     (ui/label "Merge"))))
            
                (ui/gap 0 20)
            

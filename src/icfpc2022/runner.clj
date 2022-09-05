@@ -6,6 +6,7 @@
     [clojure.math :as math]
     [clojure.string :as str]
     [icfpc2022.algo.grid :as algo.grid]
+    [icfpc2022.algo.rects :as algo.rects]
     [icfpc2022.core :as core]
     [icfpc2022.render :as render]
     [icfpc2022.score :as score]
@@ -30,7 +31,7 @@
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (def algos
-  [:grid #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
+  [:grid :rects #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
 
 (defonce ^ExecutorService executor
   (Executors/newFixedThreadPool (.availableProcessors (Runtime/getRuntime))))
@@ -145,6 +146,11 @@
     (run-clj! problem :grid
       #(algo.grid/logs problem 10 10 10000))))
 
+(defmethod run-problem! :rects [problem-id _]
+  (let [problem (get-in @*problems [problem-id :problem])]
+    (run-clj! problem :rects
+      #(algo.rects/rects problem 5000 1000))))
+
 (defn run-all! []
   #_(core/run! {} ["cargo" "build" "--release"])
   (doseq [[problem-id algo] (shuffle
@@ -177,68 +183,70 @@
      :hui.text-field/padding-bottom 10
      :hui.text-field/padding-left   5
      :hui.text-field/padding-right  5}
-    (ui/with-bounds ::bounds
-      (ui/dynamic ctx [problems  (sort-by first @*problems)
-                       partition (quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
-        (ui/padding 20
-          (ui/row
-            (interpose (ui/gap big-padding 0)
-              (for [problems (partition-all partition problems)]
-                (list
-                  ;; problem
-                  (ui/column
-                    (for [[problem-id info] problems
-                          :let [{:problem/keys [image]} (:problem info)]]
-                      (list
-                        (an-image image)
-                        (ui/gap 0 padding)
-                        (ui/label (str "# " problem-id))
-                        (ui/gap 0 padding))))
-                
-                  (ui/gap padding 0)
-                
-                  ;; best-saved
-                  (ui/column
-                    (for [[_ info] problems
-                          :let [{:keys [score image]} (:saved info)]]
-                      (list
-                        (an-image image)
-                        (ui/gap 0 padding)
-                        (ui/label score)
-                        (ui/gap 0 padding))))
-                
-                  (ui/gap padding 0)
-                
-                  ;; algos
-                  (interpose (ui/gap padding 0)
-                    (for [algo algos]
+    (ui/vscrollbar
+      (ui/vscroll
+        (ui/with-bounds ::bounds
+          (ui/dynamic ctx [problems  (sort-by first @*problems)
+                           partition 10 #_(quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
+            (ui/padding 20
+              (ui/row
+                (interpose (ui/gap big-padding 0)
+                  (for [problems (partition-all partition problems)]
+                    (list
+                      ;; problem
                       (ui/column
-                        (for [[_ info] problems
-                              :let [{:keys [score status image]} (info algo)
-                                    best (->> (dissoc info algo)
-                                           (vals)
-                                           (keep :score)
-                                           (reduce min Integer/MAX_VALUE))]]
+                        (for [[problem-id info] problems
+                              :let [{:problem/keys [image]} (:problem info)]]
                           (list
                             (an-image image)
                             (ui/gap 0 padding)
-                            (ui/label (when score
-                                        (str status (if (< score best) "🔥" "") score)))
-                            (ui/gap 0 padding))))))
+                            (ui/label (str "# " problem-id))
+                            (ui/gap 0 padding))))
+                
+                      (ui/gap padding 0)
+                
+                      ;; best-saved
+                      (ui/column
+                        (for [[_ info] problems
+                              :let [{:keys [score image]} (:saved info)]]
+                          (list
+                            (an-image image)
+                            (ui/gap 0 padding)
+                            (ui/label score)
+                            (ui/gap 0 padding))))
+                
+                      (ui/gap padding 0)
+                
+                      ;; algos
+                      (interpose (ui/gap padding 0)
+                        (for [algo algos]
+                          (ui/column
+                            (for [[_ info] problems
+                                  :let [{:keys [score status image]} (info algo)
+                                        best (->> (dissoc info algo)
+                                               (vals)
+                                               (keep :score)
+                                               (reduce min Integer/MAX_VALUE))]]
+                              (list
+                                (an-image image)
+                                (ui/gap 0 padding)
+                                (ui/label (when score
+                                            (str status (if (< score best) "🔥" "") score)))
+                                (ui/gap 0 padding))))))
                   
-                  )))
-            (ui/gap big-padding 0)
-            (ui/column
-              (ui/button run-all! (ui/label "RUN"))
-              (ui/gap 0 (* 2 padding))
-              (let [saved (reduce + 0
-                            (for [[problem info] problems]
-                              (:score (:saved info))))
-                    total (reduce + 0
-                            (for [[problem info] problems]
-                              (->> (vals info) (keep :score) (reduce min Integer/MAX_VALUE))))]
-                (ui/label (format "Delta: %,d" (- total saved))))
-              [:stretch 1 nil])
-            ))))))
+                      )))
+                (ui/gap big-padding 0)
+                (ui/column
+                  (ui/button run-all! (ui/label "RUN"))
+                  (ui/gap 0 (* 2 padding))
+                  (let [saved (reduce + 0
+                                (for [[problem info] problems]
+                                  (:score (:saved info))))
+                        total (reduce + 0
+                                (for [[problem info] problems]
+                                  (->> (vals info) (keep :score) (reduce min Integer/MAX_VALUE))))]
+                    (ui/label (format "Delta: %,d" (- total saved))))
+                  [:stretch 1 nil])
+                ))))))))
           
 (redraw)

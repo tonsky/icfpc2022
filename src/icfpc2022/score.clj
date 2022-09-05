@@ -117,8 +117,7 @@
   ([problem log limit]
    (let [{:problem/keys [bytes picture]} problem
          picture' (transform/transform-all picture log)
-         pixels   (with-open [bitmap (core/render-to-bitmap picture')]
-                    (.readPixels bitmap))
+         pixels   (core/picture-pixels picture')
          cost     (cost picture log)
          sim      (similarity bytes pixels (- limit cost))]
      {:similarity sim

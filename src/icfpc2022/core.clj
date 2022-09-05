@@ -216,6 +216,10 @@
         (draw-block canvas block)))
     bitmap))
 
+(defn ^bytes picture-pixels [picture]
+  (with-open [bitmap (render-to-bitmap picture)]
+    (.readPixels bitmap)))
+
 (defn serialize [log]
   (str/join "\n" 
     (for [op log]
