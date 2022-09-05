@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use fxhash::FxHashMap;
+use fxhash::{FxHasher, FxHashMap};
 use image::{Rgba, RgbaImage};
 use image::io::Reader as ImageReader;
 
@@ -39,6 +39,10 @@ impl Shape {
             r: size,
             t: size
         }
+    }
+
+    pub fn rect(l: Coord, b: Coord, r: Coord, t: Coord) -> Shape {
+        Shape::Rect { l, b, r, t }
     }
 
     pub fn pcut(&self, p: Point) -> Result<Vec<Shape>, Error> {
@@ -415,7 +419,7 @@ impl Picture {
     fn apply_swap(&mut self, id1: BlockId, id2: BlockId) -> Result<(), Error> {
         let block1 = self.blocks.get(&id1).ok_or_else(||
             format!("Failed to Swap: no block with id {}", id1))?.clone();
-        let block2 = self.blocks.get(&id1).ok_or_else(||
+        let block2 = self.blocks.get(&id2).ok_or_else(||
             format!("Failed to Swap: no block with id {}", id2))?.clone();
         let shape1 = block1.shape();
         let shape2 = block2.shape();
@@ -552,7 +556,7 @@ impl Problem {
         let reader = ImageReader::open(format!("../resources/{}.png", problem_id)).map_err(|err| err.to_string())?;
         let img = reader.decode().map_err(|err| err.to_string())?;
 
-        let path_str = format!("../{}.initial.json", problem_id);
+        let path_str = format!("../resources/{}.initial.json", problem_id);
         let initial_pic_path = Path::new(&path_str);
         let initial_pic = if initial_pic_path.exists() {
             let f = File::open(initial_pic_path).map_err(|err| err.to_string())?;
@@ -628,9 +632,14 @@ impl Problem {
     }
 
     fn similarity(&self, picture: &Picture) -> Result<u64, String> {
+        self.similarity_by_region(picture, Shape::rect(0, 0, picture.width, picture.height))
+    }
+
+    fn similarity_by_region(&self, picture: &Picture, shape: Shape) -> Result<u64, String> {
+        let Shape::Rect { l, b, r, t } = shape;
         let mut result = 0f64;
-        for x in 0..self.image.width() {
-            for y in 0..self.image.height() {
+        for x in l..r {
+            for y in b..t {
                 let p = Point { x: x as Coord, y: y as Coord };
                 result += self.get_color(p)?.distance(&picture.get_color(p)?);
             }
@@ -809,9 +818,55 @@ fn algo_x3y3(problem: &Problem, step: Coord) {
     });
 }
 
-// fn algo_grid(problem: &Problem, grid_step: Coord) {
-//
-// }
+fn algo_grid(problem: &Problem) -> Result<(), Error> {
+    let mut log_collector = LogCollector::new(problem.clone());
+
+    let mut log: Vec<Operation> = Vec::new();
+    let mut picture = problem.initial.clone();
+    for iteration in 0..10  {
+
+        let mut did_something = false;
+        let mut blocks_by_size: FxHashMap<(Coord, Coord), Vec<(BlockId, Block)>> = FxHashMap::default();
+        picture.blocks.iter().for_each(|(block_id, block)| {
+            let width = block.shape().widht();
+            let height = block.shape().height();
+            blocks_by_size.entry((width, height)).or_default().push((block_id.clone(), block.clone()));
+        });
+
+        for (size, blocks) in blocks_by_size {
+            for i in 0..blocks.len() {
+                for j in i..blocks.len() {
+                    let (id1, _) = blocks[i].clone();
+                    let (id2, _) = blocks[j].clone();
+                    let block1 = picture.blocks.get(&id1).unwrap().clone();
+                    let block2 = picture.blocks.get(&id2).unwrap().clone();
+
+                    let mut score_before = 0;
+                    score_before += problem.similarity_by_region(&picture, block1.shape())?;
+                    score_before += problem.similarity_by_region(&picture, block2.shape())?;
+
+                    let mut score_after = picture.cost(Operation::Swap { id1: id1.clone(), id2: id2.clone() })?;
+                    picture.apply_swap(id1.clone(), id2.clone())?;
+                    score_after += problem.similarity_by_region(&picture,  block1.shape())?;
+                    score_after += problem.similarity_by_region(&picture,  block2.shape())?;
+
+                    if score_after < score_before {
+                        log.push(Operation::Swap { id1: id1.clone(), id2: id2.clone() });
+                        log_collector.send_log(calculate_log_score(problem, &log), &log);
+                        did_something = true;
+                    } else {
+                        picture.apply_swap(id1.clone(), id2.clone())?;
+                    }
+                }
+            }
+        }
+
+        if !did_something {
+            break
+        }
+    }
+    Ok(())
+}
 
 fn calculate_log_score(problem: &Problem, log: &Log) -> u64 {
     let mut picture = problem.initial.clone();
@@ -841,9 +896,13 @@ impl LogCollector {
         let score = calculate_log_score(&self.problem, &log);
         if self.best_score.is_none() || score < self.best_score.unwrap() {
             self.best_score = Some(score);
-            let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
-            println!("{}|{}", score, strs.join("|"));
+            self.send_log(score, &log)
         }
+    }
+
+    fn send_log(&mut self, score: u64, log: &Log) {
+        let strs: Vec<String> = log.iter().map(|op| op.serialize()).collect();
+        println!("{}|{}", score, strs.join("|"));
     }
 }
 
@@ -862,6 +921,8 @@ fn main() {
         algo_x3y2(&problem, 50);
     } else if "x3y3" == args[2] {
         algo_x3y3(&problem, 50);
+    } else if "grid" == args[2] {
+        algo_grid(&problem).unwrap();
     } else {
         panic!("Unknown algorithm {}", args[2]);
     }

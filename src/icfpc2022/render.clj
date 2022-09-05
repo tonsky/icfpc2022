@@ -477,7 +477,11 @@
                  (ui/gap 10 0)
                  (ui/width btn-width
                    (ui/button #(try-rust! (:problem/id problem) "x3y3")
-                     (ui/label "x3y3"))))
+                     (ui/label "x3y3")))
+                 (ui/gap 10 0)
+                 (ui/width btn-width
+                           (ui/button #(try-rust! (:problem/id problem) "grid")
+                                      (ui/label "grid"))))
 
                (ui/gap 0 20)
 
