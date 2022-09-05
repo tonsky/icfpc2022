@@ -23,6 +23,8 @@
 
 (set! *unchecked-math* true)
 
+(set! *assert* false)
+
 (def sample-rate
   5)
 

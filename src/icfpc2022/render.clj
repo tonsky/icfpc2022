@@ -127,7 +127,7 @@
     (redraw)))
 
 (def snap
-  5)
+  1)
 
 (defn coords [ctx event]
   (let [x (int (quot (:x event) (:scale ctx)))
@@ -150,7 +150,33 @@
         :ycut
         [x' (core/round-to y' snap)]
         
+        :rect-common
+        [(core/round-to x' snap) (core/round-to y' snap)]
+        
+        :rect-average
+        [(core/round-to x' snap) (core/round-to y' snap)]
+        
         [x' y']))))
+
+(defn rect-ops [p1 p2 color-fn]
+  (if (= 1 (count @*picture))
+    (let [l     (min (first p1) (first p2))
+          b     (min (second p1) (second p2))
+          r     (max (first p1) (first p2))
+          t     (max (second p1) (second p2))
+          root  (parse-long (first (keys @*picture)))
+          color (color-fn
+                  (core/colors (:problem/bytes @*problem) [l b r t]))]
+      [[:pcut  (str root) [l t]]
+       [:pcut  (str root ".1") [r b]]
+       [:color (str root ".1.3") color]
+       [:merge (str root ".1.3") (str root ".1.2")]
+       [:merge (str root ".1.0") (str root ".1.1")]
+       [:merge (str (+ root 1)) (str (+ root 2))]
+       [:merge (str root ".0") (str (+ root 3))]
+       [:merge (str root ".2") (str root ".3")]
+       [:merge (str (+ root 5)) (str (+ root 4))]])
+    (throw (ex-info (str "Expected 1 root, got " (count @*picture)) {}))))
 
 (defn event [ctx event]
   (hui/eager-or
@@ -170,47 +196,68 @@
       (when-some [[x y] (coords ctx event)]
         (let [tool @*tool
               id   (core/block-at @*picture [x y])]
-          (when-some [op (case (first tool)
-                           :pcut
-                           [:pcut id [x y]]
+          (when-some [ops (case (first tool)
+                            :pcut
+                            [[:pcut id [x y]]]
 
-                           :xcut
-                           [:xcut id x]
+                            :xcut
+                            [[:xcut id x]]
 
-                           :ycut
-                           [:ycut id y]
+                            :ycut
+                            [[:ycut id y]]
 
-                           :color
-                           (if (< (:x event) -20)
-                             ;; picker
-                             (let [[r g b] (core/get-color (:problem/bytes @*problem) x y)]
-                               (reset! *tool [:color r g b])
-                               nil)  
-                             ;; fill
-                             (let [[_ r g b] tool]
-                               [:color id [r g b]]))
+                            :color
+                            (if (< (:x event) -20)
+                              ;; picker
+                              (let [[r g b] (core/get-color (:problem/bytes @*problem) x y)]
+                                (reset! *tool [:color r g b])
+                                nil)
+                              ;; fill
+                              (let [[_ r g b] tool]
+                                [[:color id [r g b]]]))
 
-                           :swap
-                           (let [[_ id1] tool]
-                             (if (some? id1)
-                               (do
-                                 (reset! *tool [:swap])
-                                 [:swap id1 id])
-                               (do
-                                 (reset! *tool [:swap id])
-                                 nil)))
+                            :swap
+                            (let [[_ id1] tool]
+                              (if (some? id1)
+                                (do
+                                  (reset! *tool [:swap])
+                                  [[:swap id1 id]])
+                                (do
+                                  (reset! *tool [:swap id])
+                                  nil)))
 
-                           :merge
-                           (let [[_ id1] tool]
-                             (if (some? id1)
-                               (do
-                                 (swap! *tool (fn [_] [:merge]))
-                                 [:merge id1 id])
-                               (do
-                                 (swap! *tool (fn [_] [:merge id]))
-                                 nil)))
-                           nil)]
-            (swap! *log conj op)
+                            :merge
+                            (let [[_ id1] tool]
+                              (if (some? id1)
+                                (do
+                                  (swap! *tool (fn [_] [:merge]))
+                                  [[:merge id1 id]])
+                                (do
+                                  (swap! *tool (fn [_] [:merge id]))
+                                  nil)))
+                           
+                            :rect-common
+                            (let [[_ p1 _] tool]
+                              (if (some? p1)
+                                (do
+                                  (swap! *tool (fn [_] [:rect-common]))
+                                  (rect-ops p1 [x y] core/most-common))
+                                (do
+                                  (swap! *tool (fn [_] [:rect-common [x y]]))
+                                  nil)))
+                            
+                            :rect-average
+                            (let [[_ p1 _] tool]
+                              (if (some? p1)
+                                (do
+                                  (swap! *tool (fn [_] [:rect-average]))
+                                  (rect-ops p1 [x y] core/average))
+                                (do
+                                  (swap! *tool (fn [_] [:rect-average [x y]]))
+                                  nil)))
+                                 
+                            nil)]
+            (swap! *log into ops)
             true))))))
 
 (def fill-guides
@@ -428,6 +475,14 @@
              
                  (ui/width btn-width 
                    (tool [:merge] (ui/label "Merge"))))
+               
+               (ui/gap 0 10)
+               (ui/row
+                 (ui/width btn-width 
+                   (tool [:rect-common] (ui/label "Rect Common")))
+                 (ui/gap 10 0)
+                 (ui/width btn-width 
+                   (tool [:rect-average] (ui/label "Rect Average"))))
                       
                (ui/gap 0 20)
            
@@ -491,8 +546,8 @@
                      (ui/label "x3y3")))
                  (ui/gap 10 0)
                  (ui/width btn-width
-                           (ui/button #(try-rust! (:problem/id problem) "grid")
-                                      (ui/label "grid"))))
+                   (ui/button #(try-rust! (:problem/id problem) "grid")
+                     (ui/label "grid"))))
 
                (ui/gap 0 20)
 
@@ -565,4 +620,6 @@
       (println id sim)
       (.mkdirs dir)
       (spit (io/file dir (str sim)) "")))
+  
+  (assert false)
   )
