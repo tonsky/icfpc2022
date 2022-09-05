@@ -54,8 +54,5 @@
         op))))
 
 (defn logs [problem ylen xlen iters]
-  (concat
-    (repeatedly (quot iters 2)
-      #(log (:problem/bytes problem) ylen xlen :ycut :xcut))
-    (repeatedly (quot iters 2)
-      #(log (:problem/bytes problem) ylen xlen :xcut :ycut))))
+  (repeatedly iters
+    #(log (:problem/bytes problem) ylen xlen :xcut :ycut)))

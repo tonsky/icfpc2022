@@ -13,19 +13,15 @@
           r (range (+ l step) 400 step)
           b (range step (- 400 step) step)
           t (range (+ b step) 400 step)
-          :let [colors-in  (core/cached [::colors-in l b r t]
-                             (for [x (range l r sample)
-                                   y (core/rrange b t sample)]
-                               (core/get-color bytes x y)))
-                colors-out (core/cached [::colors-out l b r t]
-                             (for [x (range 0 400 sample)
-                                   y (core/rrange 0 400 sample)
-                                   :when (or (< x l) (> x r) (< y b) (> y t))]
-                               (core/get-color bytes x y)))]
-          color-in  (core/cached [::color-variants-in l b r t]
-                      (core/color-variants colors-in))
-          color-out (core/cached [::color-variants-out l b r t]
-                      (core/color-variants colors-out))]
+          :let [colors-in  (for [x (range l r sample)
+                                 y (core/rrange b t sample)]
+                             (core/get-color bytes x y))
+                colors-out (for [x (range 0 400 sample)
+                                 y (core/rrange 0 400 sample)
+                                 :when (or (< x l) (> x r) (< y b) (> y t))]
+                             (core/get-color bytes x y))]
+          color-in  (core/color-variants colors-in)
+          color-out (core/color-variants colors-out)]
       [[:color "0"     color-out]
        [:pcut  "0"     [l b]]
        [:pcut  "0.2"   [r t]]

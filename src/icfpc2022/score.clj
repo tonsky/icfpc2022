@@ -119,8 +119,8 @@
          picture' (transform/transform-all picture log)
          pixels   (with-open [bitmap (core/render-to-bitmap picture')]
                     (.readPixels bitmap))
-         sim      (similarity bytes pixels limit)
-         cost     (cost picture log)]
+         cost     (cost picture log)
+         sim      (similarity bytes pixels (- limit cost))]
      {:similarity sim
       :cost       cost
       :score      (+ cost sim)})))

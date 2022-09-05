@@ -171,11 +171,9 @@
     [r g b]))
 
 (defn colors [^bytes bytes [l b r t]]
-  (cached [::colors l b r t]
-    (vec
-      (for [x (range l r sample-rate)
-            y (rrange b t sample-rate)]
-        (get-color bytes x y)))))
+  (for [x (range l r sample-rate)
+        y (rrange b t sample-rate)]
+    (get-color bytes x y)))
 
 (defn average [colors]
   (let [[r g b] (reduce
