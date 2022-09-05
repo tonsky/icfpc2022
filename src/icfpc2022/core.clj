@@ -51,6 +51,12 @@
     (<= b y)
     (< y t)))
 
+(defn rrange
+  ([from to]
+   (rrange from to 1))
+  ([from to step]
+   (range (- to step) (dec from) (- step))))
+
 (defn simple? [block]
   (assert (or 
             (instance? SimpleBlock block)
@@ -185,12 +191,6 @@
   (->> (frequencies colors)
     (apply max-key second)
     (first)))
-
-(defn rrange
-  ([from to]
-   (rrange from to 1))
-  ([from to step]
-   (range (- to step) (dec from) (- step))))
 
 (defn color-variants [colors]
   [(average colors)

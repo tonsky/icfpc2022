@@ -5,6 +5,7 @@
     [clojure.java.io :as io]
     [clojure.math :as math]
     [clojure.string :as str]
+    [icfpc2022.algo.grid :as algo.grid]
     [icfpc2022.algo.merge :as algo.merge]
     [icfpc2022.algo.paint :as algo.paint]
     [icfpc2022.algo.rect :as algo.rect]
@@ -103,6 +104,11 @@
             (reset! *problem (core/load-problem id))
             (reset! *log [])
             (spit "last_open" (str id))))))))
+
+(add-watch *image ::close
+  (fn [_ _ old new]
+    (when (not= old new)
+      (some-> ^Image old .close))))
 
 (def *guides?
   (atom true))
@@ -248,7 +254,8 @@
               *best-score (volatile! Long/MAX_VALUE)
               *iter       (volatile! 0)]
           (doseq [log logs]
-            (let [picture         (transform/transform-all (:problem/picture problem) log)
+            (let [log             (vec log)
+                  picture         (transform/transform-all (:problem/picture problem) log)
                   {:keys [score]} (score/score problem log @*best-score)]
               (when (< score @*best-score)
                 (vreset! *best-score score)
@@ -442,6 +449,10 @@
                
                (ui/gap 0 10)
                (ui/row
+                 (ui/width btn-width
+                   (ui/button #(try-clj! (algo.grid/logs problem 10 10 1000))
+                     (ui/label "Grid")))
+                 (ui/gap 10 0)
                  (ui/width btn-width
                    (ui/button #(try-clj! (algo.merge/merge (:problem/picture problem)))
                      (ui/label "Merge")))
