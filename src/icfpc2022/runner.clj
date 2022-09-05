@@ -23,7 +23,7 @@
     [io.github.humbleui.skija Bitmap Canvas Color ColorAlphaType ColorSpace ColorType Image ImageInfo]
     [io.github.humbleui.types IPoint IRect Rect]
     [java.io File]
-    [java.util.concurrent Executors ExecutorService]))
+    [java.util.concurrent Future Executors ExecutorService]))
 
 (set! *warn-on-reflection* true)
 
@@ -120,9 +120,9 @@
                 :log   log
                 :image image)))))
       (swap! *problems update-in [problem-id algo] assoc :status "☑️")
-      (let [best (get-in @*problems [problem-id algo :score])
-            time (/ (- (System/currentTimeMillis) t0) 1000.0)]
-        (core/log (format "[ DONE ] %s %s %d in %,.1f sec" problem-id algo best time)))
+      #_(let [best (get-in @*problems [problem-id algo :score])
+              time (/ (- (System/currentTimeMillis) t0) 1000.0)]
+          (core/log (format "[ DONE ] %s %s %d in %,.1f sec" problem-id algo best time)))
       
       (let [info   (get @*problems problem-id)
             score  (:score (get info algo))
@@ -144,20 +144,32 @@
 (defmethod run-problem! :grid [problem-id _]
   (let [problem (get-in @*problems [problem-id :problem])]
     (run-clj! problem :grid
-      #(algo.grid/logs problem 10 10 10000))))
+      #(algo.grid/logs problem 10 10 1000))))
 
 (defmethod run-problem! :rects [problem-id _]
   (let [problem (get-in @*problems [problem-id :problem])]
     (run-clj! problem :rects
-      #(algo.rects/rects problem 5000 1000))))
+      #(algo.rects/rects problem 1000 100))))
 
 (defn run-all! []
-  #_(core/run! {} ["cargo" "build" "--release"])
-  (doseq [[problem-id algo] (shuffle
-                              (for [problem-id (keys @*problems)
-                                    algo       algos]
-                                [problem-id algo]))]
-    (.submit executor ^Runnable #(run-problem! problem-id algo))))
+  (core/thread
+    #_(core/run! {} ["cargo" "build" "--release"])
+    (loop []
+      (let [futures (vec
+                      (for [[problem-id algo] (shuffle
+                                                (for [problem-id (keys @*problems)
+                                                      algo       algos]
+                                                  [problem-id algo]))]
+                        (.submit executor ^Runnable #(run-problem! problem-id algo))))]
+        (doseq [f futures]
+          (.get ^Future f))
+        (doseq [[problem-id info] @*problems]
+          (when-some [saved-score (core/saved-score problem-id)]
+            (swap! *problems update-in [problem-id :saved] assoc
+              :score saved-score
+              :image (saved-image (:problem info) saved-score))))
+        (println "---")
+        (recur)))))
 
 (def padding
   5)
