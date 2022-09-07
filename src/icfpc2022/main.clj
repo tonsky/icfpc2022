@@ -61,5 +61,6 @@
   (reset! **app
     (case (first args)
       "runner" (requiring-resolve 'icfpc2022.runner/app)
+      "presenter" (requiring-resolve 'icfpc2022.presenter/app)
       (requiring-resolve 'icfpc2022.render/app)))
   (app/start #(reset! *window (make-window))))
