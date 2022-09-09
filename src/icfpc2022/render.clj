@@ -9,6 +9,7 @@
     [icfpc2022.algo.merge :as algo.merge]
     [icfpc2022.algo.paint :as algo.paint]
     [icfpc2022.algo.rects :as algo.rects]
+    [icfpc2022.algo.smart-grid :as algo.smart-grid]
     [icfpc2022.core :as core]
     [icfpc2022.score :as score]
     [icfpc2022.transform :as transform]
@@ -499,6 +500,12 @@
                  (ui/width btn-width
                    (ui/button (fn [] (try-clj! #(algo.merge/merge (:problem/picture problem))))
                      (ui/label "Merge"))))
+                              
+               (ui/gap 0 10)
+               (ui/row
+                 (ui/width btn-width
+                   (ui/button (fn [] (try-clj! #(algo.smart-grid/logs problem)))
+                     (ui/label "Smart Grid"))))
            
                (ui/gap 0 20)
            

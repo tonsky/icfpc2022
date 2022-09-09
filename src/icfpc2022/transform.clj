@@ -27,12 +27,12 @@
    [l y x t]])
 
 (defn xcut-rect [[l b r t] x]
-  (assert (and (< x r) (< l x)))
+  (assert (and (< x r) (< l x)) (format "(xcut-rect [%d %d %d %d] %d)" l b r t x))
   [[l b x t]
    [x b r t]])
 
 (defn ycut-rect [[l b r t] y]
-  (assert (and (< y t) (< b y)))
+  (assert (and (< y t) (< b y)) (format "(ycut-rect [%d %d %d %d] %d)" l b r t y))
   [[l b r y]
    [l y r t]])
 

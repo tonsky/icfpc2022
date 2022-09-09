@@ -7,6 +7,7 @@
     [clojure.string :as str]
     [icfpc2022.algo.grid :as algo.grid]
     [icfpc2022.algo.rects :as algo.rects]
+    [icfpc2022.algo.smart-grid :as algo.smart-grid]
     [icfpc2022.core :as core]
     [icfpc2022.render :as render]
     [icfpc2022.score :as score]
@@ -31,7 +32,7 @@
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (def algos
-  [:grid :rects #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
+  [:smart-grid #_:grid #_:rects #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
 
 (defonce ^ExecutorService executor
   (Executors/newFixedThreadPool (.availableProcessors (Runtime/getRuntime))))
@@ -102,13 +103,13 @@
 
 (defn run-clj! [problem algo logs-fn]
   (try
-    (let [t0 (System/currentTimeMillis)
+    (let [t0         (System/currentTimeMillis)
           problem-id (:problem/id problem)]
       (swap! *problems update-in [problem-id algo] assoc
         :status "⏳")
       
       (doseq [log (logs-fn)]
-        (let [log  (vec log)
+        (let [log (vec log)
               best (get-in @*problems [problem-id algo :score] Long/MAX_VALUE)
               {:keys [score]} (score/score problem log best)]
           (when (< score best)
@@ -124,16 +125,16 @@
               time (/ (- (System/currentTimeMillis) t0) 1000.0)]
           (core/log (format "[ DONE ] %s %s %d in %,.1f sec" problem-id algo best time)))
       
-      (let [info   (get @*problems problem-id)
-            score  (:score (get info algo))
-            scores (->> (dissoc info algo)
-                     (vals)
-                     (keep :score)
-                     (reduce min Integer/MAX_VALUE))]
-        (when (< score scores)
-          (let [file (core/save problem-id (:log (get info algo)) score)
-                resp (core/submit problem-id file)]
-            (core/log (format "💌 Sent! %d with score %d, status: %d, resp: %s" problem-id score (:status resp) (:body resp)))))))
+      #_(let [info   (get @*problems problem-id)
+              score  (:score (get info algo))
+              scores (->> (dissoc info algo)
+                       (vals)
+                       (keep :score)
+                       (reduce min Integer/MAX_VALUE))]
+          (when (< score scores)
+            (let [file (core/save problem-id (:log (get info algo)) score)
+                  resp (core/submit problem-id file)]
+              (core/log (format "💌 Sent! %d with score %d, status: %d, resp: %s" problem-id score (:status resp) (:body resp)))))))
     (catch Throwable t
       (.printStackTrace t))))
 
@@ -151,25 +152,27 @@
     (run-clj! problem :rects
       #(algo.rects/rects problem 1000 100))))
 
+(defmethod run-problem! :smart-grid [problem-id _]
+  (let [problem (get-in @*problems [problem-id :problem])]
+    (run-clj! problem :smart-grid
+      #(algo.smart-grid/logs problem))))
+
 (defn run-all! []
   (core/thread
     #_(core/run! {} ["cargo" "build" "--release"])
-    (loop []
-      (let [futures (vec
-                      (for [[problem-id algo] (shuffle
-                                                (for [problem-id (keys @*problems)
-                                                      algo       algos]
-                                                  [problem-id algo]))]
-                        (.submit executor ^Runnable #(run-problem! problem-id algo))))]
-        (doseq [f futures]
-          (.get ^Future f))
-        (doseq [[problem-id info] @*problems]
-          (when-some [saved-score (core/saved-score problem-id)]
-            (swap! *problems update-in [problem-id :saved] assoc
-              :score saved-score
-              :image (saved-image (:problem info) saved-score))))
-        (println "---")
-        (recur)))))
+    (let [futures (vec
+                    (for [[problem-id algo] (shuffle
+                                              (for [problem-id (keys @*problems)
+                                                    algo       algos]
+                                                [problem-id algo]))]
+                      (.submit executor ^Runnable #(run-problem! problem-id algo))))]
+      (doseq [f futures]
+        (.get ^Future f))
+      (doseq [[problem-id info] @*problems]
+        (when-some [saved-score (core/saved-score problem-id)]
+          (swap! *problems update-in [problem-id :saved] assoc
+            :score saved-score
+            :image (saved-image (:problem info) saved-score)))))))
 
 (def padding
   5)
@@ -199,7 +202,7 @@
       (ui/vscroll
         (ui/with-bounds ::bounds
           (ui/dynamic ctx [problems  (sort-by first @*problems)
-                           partition 10 #_(quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
+                           partition 8 #_(quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
             (ui/padding 20
               (ui/row
                 (interpose (ui/gap big-padding 0)

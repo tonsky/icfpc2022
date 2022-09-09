@@ -23,7 +23,7 @@
 
 (set! *unchecked-math* true)
 
-(set! *assert* false)
+(set! *assert* true)
 
 (def sample-rate
   5)
@@ -160,10 +160,21 @@
 
 (defn block-at [picture [x y]]
   (reduce-kv 
-    (fn [acc id block]
+    (fn [_ id block]
       (when (inside? (:rect block) [x y])
         (reduced id)))
     nil picture))
+
+(defn color-at [picture [x y]]
+  (let [block (picture (block-at picture [x y]))]
+    (if (simple? block)
+      (:color block)
+      (:color
+        (reduce
+          (fn [_ block]
+            (when (inside? (:rect block) [x y])
+              (reduced block)))
+          nil (:children block))))))
 
 (defn get-color [^bytes bytes x y]
   (let [idx (* 4 (+ x (* 400 (- 399 y))))
@@ -173,8 +184,8 @@
     [r g b]))
 
 (defn colors [^bytes bytes [l b r t]]
-  (for [x (range l r sample-rate)
-        y (rrange b t sample-rate)]
+  (for [y (rrange b t (min sample-rate (- t b)))
+        x (range l r (min sample-rate (- r l)))]
     (get-color bytes x y)))
 
 (defn average [colors]
@@ -187,6 +198,40 @@
      (int (/ g len))
      (int (/ b len))]))
 
+(defn dist [[r1 g1 b1] [r2 g2 b2]]
+  (math/sqrt
+    (+
+      (* (- r1 r2) (- r1 r2))
+      (* (- g1 g2) (- g1 g2))
+      (* (- b1 b2) (- b1 b2)))))
+
+(defn median [colors]
+  (reduce
+    (fn [[yr yg yb] _]
+      (let [den (reduce (fn [acc [xr xg xb]]
+                          (if (= [yr yg yb] [xr xg xb])
+                            acc
+                            (+ acc (/ 1 (dist [yr yg yb] [xr xg xb]))))) 0 colors)
+            yr' (reduce (fn [acc [xr xg xb]]
+                          (if (= [yr yg yb] [xr xg xb])
+                            acc
+                            (+ acc (/ xr (dist [yr yg yb] [xr xg xb]))))) 0 colors)
+            yg' (reduce (fn [acc [xr xg xb]]
+                          (if (= [yr yg yb] [xr xg xb])
+                            acc
+                            (+ acc (/ xg (dist [yr yg yb] [xr xg xb]))))) 0 colors)
+            yb' (reduce (fn [acc [xr xg xb]]
+                          (if (= [yr yg yb] [xr xg xb])
+                            acc
+                            (+ acc (/ xb (dist [yr yg yb] [xr xg xb]))))) 0 colors)]
+        (if (= 0 den)
+          (reduced [yr yg yb])
+          [(long (/ yr' den))
+           (long (/ yg' den))
+           (long (/ yb' den))])))
+    (average colors)
+    (range 30)))
+
 (defn most-common [colors]
   (->> (frequencies colors)
     (apply max-key second)
@@ -197,6 +242,7 @@
    (most-common colors)])
 
 (defn draw-block [^Canvas canvas block]
+  (assert (some? block))
   (if (instance? ComplexBlock block)
     (doseq [child (:children block)]
       (draw-block canvas child))
@@ -258,9 +304,9 @@
     file))
 
 (defn submit [problem-id content]
-  (http/post (str "https://robovinci.xyz/api/submissions/" problem-id "/create")
-    {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
-     :multipart [{:name "file" :content content}]}))  
+  #_(http/post (str "https://robovinci.xyz/api/submissions/" problem-id "/create")
+      {:headers {"Authorization" (str "Bearer " (slurp "api_token"))}
+       :multipart [{:name "file" :content content}]}))  
 
 (Thread/setDefaultUncaughtExceptionHandler
   (reify Thread$UncaughtExceptionHandler
