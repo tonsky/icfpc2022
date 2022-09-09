@@ -32,7 +32,7 @@
   (some-> (resolve 'icfpc2022.main/*window) deref deref window/request-frame))
 
 (def algos
-  [:smart-grid #_:grid #_:rects #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
+  [:smart-grid :adapt-grid #_:grid #_:rects #_:xcut #_:ycut #_:rect #_:x3y2 #_:x3y3])
 
 (defonce ^ExecutorService executor
   (Executors/newFixedThreadPool (.availableProcessors (Runtime/getRuntime))))
@@ -157,6 +157,11 @@
     (run-clj! problem :smart-grid
       #(algo.smart-grid/logs problem))))
 
+(defmethod run-problem! :adapt-grid [problem-id _]
+  (let [problem (get-in @*problems [problem-id :problem])]
+    (run-clj! problem :adapt-grid
+      #(algo.smart-grid/adaptive-logs problem))))
+
 (defn run-all! []
   (core/thread
     #_(core/run! {} ["cargo" "build" "--release"])
@@ -202,7 +207,7 @@
       (ui/vscroll
         (ui/with-bounds ::bounds
           (ui/dynamic ctx [problems  (sort-by first @*problems)
-                           partition 8 #_(quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
+                           partition 10 #_(quot (- (:height (::bounds ctx)) 40) (+ image-size padding padding 10))]
             (ui/padding 20
               (ui/row
                 (interpose (ui/gap big-padding 0)

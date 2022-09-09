@@ -43,6 +43,16 @@
   (fn [_ _ _ _]
     (vswap! core/*cache empty)))
 
+(defonce *columns
+  (atom (algo.smart-grid/detect-cols (:problem/bytes @*problem))))
+
+(defonce *rows
+  (atom (algo.smart-grid/detect-rows (:problem/bytes @*problem))))
+
+(add-watch *problem ::update-grid
+  (fn [_ _ old new]
+    (reset! *columns (algo.smart-grid/detect-cols (:problem/bytes new)))
+    (reset! *rows (algo.smart-grid/detect-rows (:problem/bytes new)))))
 
 (defonce *log
   (atom []))
@@ -268,6 +278,13 @@
 (def stroke-cursor
   (paint/stroke 0xFFFF8080 2))
 
+(defn draw-grid [ctx ^Canvas canvas bytes]
+  (let [{:keys [scale]} ctx]
+    (doseq [x @*columns]
+      (canvas/draw-line canvas (* scale x) 0 (* scale x) (* scale 400) stroke-guides))
+    (doseq [y @*rows]
+      (canvas/draw-line canvas 0 (* scale (- 400 y)) (* scale 400) (* scale (- 400 y)) stroke-guides))))
+
 (defn draw-guides [ctx ^Canvas canvas picture]
   (let [{:keys [scale]} ctx]
     (doseq [[id block] picture]
@@ -354,7 +371,8 @@
                     (ui/dynamic _ [picture @*picture]
                       (ui/canvas {:on-paint (fn [ctx canvas size]
                                               (when @*guides?
-                                                (draw-guides ctx canvas picture))
+                                                (draw-guides ctx canvas picture)
+                                                (draw-grid ctx canvas (:problem/bytes problem)))
                                               (draw-cursor ctx canvas))})))))
               (ui/gap 0 20)
               (ui/row
@@ -505,7 +523,11 @@
                (ui/row
                  (ui/width btn-width
                    (ui/button (fn [] (try-clj! #(algo.smart-grid/logs problem)))
-                     (ui/label "Smart Grid"))))
+                     (ui/label "Equal Grid")))
+                 (ui/gap 10 0)
+                 (ui/width btn-width
+                   (ui/button (fn [] (try-clj! #(algo.smart-grid/adaptive-logs problem)))
+                     (ui/label "Adapt Grid"))))
            
                (ui/gap 0 20)
            
