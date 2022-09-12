@@ -5,3 +5,5 @@ api_token
 .idea
 *.iml
 last_open
+zig-cache
+zig-out
